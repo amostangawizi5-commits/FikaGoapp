@@ -1,0 +1,160 @@
+{
+  "app_name": "FikaGo",
+  "tagline": "Tunakufikishia",
+  
+  "splash": {
+    "loading": "Inapakia..."
+  },
+
+  "auth": {
+    "welcome": "Karibu FikaGo",
+    "login_subtitle": "Ingia kwa namba yako na password",
+    "register_subtitle": "Jaza taarifa zako ili kuanza kuagiza",
+    "phone_label": "Namba ya Simu",
+    "phone_hint": "+255 712 345 678",
+    "password_label": "Password",
+    "password_hint": "Herufi 6 au zaidi",
+    "confirm_password_label": "Rudia Password",
+    "confirm_password_hint": "Rudia password yako",
+    "fullname_label": "Jina Kamili",
+    "fullname_hint": "Mfano: Ali Hassan",
+    "email_label": "Email (Hiari)",
+    "email_hint": "Mfano: ali@gmail.com",
+    "login_btn": "INGIA",
+    "register_btn": "SAJILI SASA",
+    "otp_btn": "INGIA KWA OTP",
+    "send_otp_btn": "TUMA OTP",
+    "verify_btn": "THIBITISHA",
+    "no_account": "Huna akaunti? ",
+    "have_account": "Nina akaunti tayari? ",
+    "register_link": "Sajili Hapa",
+    "login_link": "Ingia Hapa",
+    "or": "AU",
+    "terms": "Kwa kuendelea, unakubali Masharti na Sera yetu",
+    "otp_sent_to": "Tumekutumia OTP kwa",
+    "dev_otp": "DEV OTP",
+    "enter_name": "Ingiza Jina Lako",
+    "new_user_btn": "Nina akaunti mpya? Bonyeza hapa",
+    "existing_user_btn": "Nina akaunti tayari (Rudi)",
+    "errors": {
+      "empty_phone": "Tafadhali ingiza namba ya simu",
+      "invalid_phone": "Namba lazima ianze na +255 au 0",
+      "short_phone": "Namba ya simu ni fupi mno",
+      "empty_password": "Tafadhali ingiza password",
+      "password_mismatch": "Password hazifanani",
+      "short_password": "Password lazima iwe herufi 6+",
+      "empty_fields": "Jaza sehemu zote muhimu",
+      "login_failed": "Imeshindwa kuingia",
+      "register_failed": "Imeshindwa kusajili",
+      "otp_failed": "OTP si sahihi au imeisha muda"
+    },
+    "success": {
+      "register": "Usajili umefanikiwa! Karibu FikaGo.",
+      "login": "Karibu tena!"
+    }
+  },
+
+  "home": {
+    "greeting": "Leo unataka kula nini?",
+    "location": "Mikocheni, Dar es Salaam",
+    "search_hint": "Tafuta chakula, mgahawa...",
+    "categories": "Kategoria",
+    "see_all": "Ona Zote",
+    "promo_title": "Free Delivery!",
+    "promo_desc": "Kwa oda yako ya kwanza. Tumia code: FIKA50",
+    "nearby_restaurants": "Magahawa Yaliyo Karibu",
+    "no_restaurants": "Hakuna magahawa yaliyopatikana",
+    "guest_title": "Karibu Mgeni!",
+    "guest_desc": "Ingia ili kukamilisha oda yako",
+    "login_now": "INGIA",
+    "categories_list": {
+      "food": "Food",
+      "grocery": "Grocery",
+      "shops": "Shops",
+      "drinks": "Drinks",
+      "pharmacy": "Pharmacy",
+      "salon": "Salon"
+    }
+  },
+
+  "cart": {
+    "title": "Kikapu Changu",
+    "empty_title": "Kikapu Chako ni Tupu",
+    "empty_desc": "Anza kuagiza chakula kitamu kutoka kwa magahawa yetu.",
+    "start_shopping": "ANZA KUNUNUA",
+    "clear_cart": "Futa Kikapu?",
+    "clear_desc": "Una uhakika unataka kufuta vyakula vyote?",
+    "yes": "NDIYO",
+    "no": "HAPANA",
+    "checkout": "ENDELEA KULIPA",
+    "summary": "Muhtasari wa Malipo",
+    "subtotal": "Subtotal",
+    "delivery_fee": "Delivery Fee",
+    "service_fee": "Service Fee",
+    "discount": "Discount",
+    "total": "Jumla"
+  },
+
+  "checkout": {
+    "title": "Kamilisha Oda",
+    "delivery_address": "Eneo la Kupeleka",
+    "address_hint": "Mfano: Mikocheni, Near Mwenge",
+    "landmark_hint": "Alama ya kijiji (Hiari)",
+    "phone": "Namba ya Simu",
+    "payment_method": "Njia ya Malipo",
+    "cash": "Pesa Taslimu",
+    "instructions": "Maelezo ya Ziada",
+    "instructions_hint": "Mfano: Wali bila pilipili...",
+    "subtotal": "Subtotal",
+    "delivery_fee": "Delivery Fee",
+    "service_fee": "Service Fee",
+    "total": "Jumla",
+    "place_order": "TUMA ODA",
+    "fill_fields": "Tafadhali jaza jina, eneo na namba ya simu",
+    "order_failed": "Imeshindwa kuunda oda",
+    "payment_failed": "Imeshindwa kuanzisha malipo",
+    "order_success": "Oda yako imepokelewa!"
+  },
+
+  "orders": {
+    "title": "Oda Zangu",
+    "tab_active": "Zinaendelea",
+    "tab_history": "Historia",
+    "track": "Fuatilia",
+    "total": "Jumla"
+  },
+
+  "wallet": {
+    "title": "Wallet Yangu",
+    "balance": "BALANCE YANGU",
+    "add_money": "ONGEZA",
+    "withdraw": "TOA",
+    "pending": "Pending",
+    "points": "Loyalty Points",
+    "history": "Historia ya Malipo",
+    "see_all": "Ona Zote",
+    "payment": "Malipo",
+    "top_up": "Kuongeza Pesa",
+    "refund": "Refund"
+  },
+
+  "profile": {
+    "title": "Wasifu Wangu",
+    "guest": "Mgeni",
+    "not_logged_in": "Hujaingia",
+    "addresses": "Address Zangu",
+    "payment_methods": "Njia za Malipo",
+    "notifications": "Notifications",
+    "language": "Lugha",
+    "help": "Msaada & Support",
+    "logout": "ONDOA AKAUNTI (LOGOUT)"
+  },
+  "vendor_profile": {
+    "store_info": "Taarifa za Mgahawa",
+    "opening_hours": "Muda wa Kufungua",
+    "language": "Lugha",
+    "help": "Msaada",
+    "logout": "ONDOA AKAUNTI (LOGOUT)",
+    "logout_confirm": "Ondoa Akaunti?"
+  }
+}

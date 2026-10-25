@@ -1,0 +1,288 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../config/theme.dart';
+import '../../services/vendor_service.dart';
+
+class VendorMenuScreen extends StatefulWidget {
+  const VendorMenuScreen({super.key});
+
+  @override
+  State<VendorMenuScreen> createState() => _VendorMenuScreenState();
+}
+
+class _VendorMenuScreenState extends State<VendorMenuScreen> {
+  List<Map<String, dynamic>> _items = [];
+  bool _isLoading = true;
+
+  @override
+  void initState()    super.initState();
+    _loadMenu();
+  }
+
+  Future<void> _loadMenu() async {
+    setState(() => _isLoading = true);
+    final response = await VendorService.getMenu();
+    if (!mounted) return;
+    setState(() {
+      _items = response['success'] == true
+          ? (response['data'] as List)
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
+          : [];
+      _isLoading = false;
+    });
+    if (response['success'] != true) {
+      _showMessage(response['message'] ?? 'Imeshindwa kupata menu.');
+    }
+  }
+
+  Future<void> _addItem() async {
+    final nameController = TextEditingController();
+    final categoryController = TextEditingController(text: 'Vyakula');
+    final priceController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    final values = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ongeza chakula au huduma'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _formField(nameController, 'Jina la chakula / huduma'),
+              const SizedBox(height: 12),
+              _formField(categoryController, 'Kategoria'),
+              const SizedBox(height: 12),
+              _formField(
+                priceController,
+                'Bei (TZS)',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 12),
+              _formField(
+                descriptionController,
+                'Maelezo (hiari)',
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Ghairi'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              final category = categoryController.text.trim();
+              final price = double.tryParse(priceController.text.trim());
+              if (name.isEmpty ||
+                  category.isEmpty ||
+                  price == null ||
+                  price <= 0) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                      content: Text('Jaza jina, kategoria na bei sahihi.')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'name': name,
+                'category': category,
+                'price': price.toString(),
+                'description': descriptionController.text.trim(),
+              });
+            },
+            child: const Text('Hifadhi'),
+          ),
+        ],
+      ),
+    );
+
+    nameController.dispose();
+    categoryController.dispose();
+    priceController.dispose();
+    descriptionController.dispose();
+    if (values == null || !mounted) return;
+
+    final response = await VendorService.addMenuItem(
+      name: values['name']!,
+      categoryName: values['category']!,
+      price: double.parse(values['price']!),
+      description: values['description'],
+    );
+    if (!mounted) return;
+    if (response['success'] == true) {
+      _showMessage('Bidhaa imeongezwa na sasa inaonekana kwa wateja.');
+      await _loadMenu();
+    } else {
+      _showMessage(response['message'] ?? 'Imeshindwa kuongeza bidhaa.');
+    }
+  }
+
+  Future<void> _setAvailability(
+      Map<String, dynamic> item, bool available) async {
+    final id = int.tryParse(item['id'].toString());
+    if (id == null) return;
+    final response = await VendorService.updateMenuItem(
+      itemId: id,
+      isAvailable: available,
+    );
+    if (!mounted) return;
+    if (response['success'] == true) {
+      await _loadMenu();
+    } else {
+      _showMessage(
+          response['message'] ?? 'Imeshindwa kubadilisha hali ya bidhaa.');
+    }
+  }
+
+  Future<void> _deleteItem(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Futa bidhaa?'),
+        content: Text('Una uhakika unataka kufuta ${item['name']}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Ghairi'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Futa'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final id = int.tryParse(item['id'].toString());
+    if (id == null) return;
+    final response = await VendorService.deleteMenuItem(id);
+    if (!mounted) return;
+    if (response['success'] == true) {
+      await _loadMenu();
+    } else {
+      _showMessage(response['message'] ?? 'Imeshindwa kufuta bidhaa.');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _formField(
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboardType,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: FikaGoColors.lightGrey,
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          'Menu ya Mgahawa',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: FikaGoColors.charcoal,
+        elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Ongeza chakula au huduma',
+            icon: const Icon(Icons.add_circle,
+                color: FikaGoColors.forestGreen, size: 28),
+            onPressed: _addItem,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadMenu,
+              child: _items.isEmpty
+                  ? ListView(
+                      children: const [
+                        SizedBox(height: 140),
+                        Icon(Icons.restaurant_menu,
+                            size: 56, color: FikaGoColors.forestGreen),
+                        SizedBox(height: 12),
+                        Center(child: Text('Bado hujaweka chakula au huduma.')),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _items.length,
+                      itemBuilder: (context, index) {
+                        final item = _items[index];
+                        final available = item['is_available'] != false;
+                        final price =
+                            double.tryParse(item['price'].toString()) ?? 0;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            leading: const CircleAvatar(
+                              backgroundColor: FikaGoColors.lightGreen,
+                              child: Icon(Icons.fastfood,
+                                  color: FikaGoColors.forestGreen),
+                            ),
+                            title: Text(item['name']?.toString() ?? ''),
+                            subtitle: Text(
+                              '${item['category_name'] ?? 'Bidhaa'} • TZS ${price.toStringAsFixed(0)}',
+                            ),
+                            isThreeLine: item['description'] != null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Switch(
+                                  value: available,
+                                  activeThumbColor: FikaGoColors.forestGreen,
+                                  onChanged: (value) =>
+                                      _setAvailability(item, value),
+                                ),
+                                IconButton(
+                                  tooltip: 'Futa',
+                                  onPressed: () => _deleteItem(item),
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addItem,
+        backgroundColor: FikaGoColors.forestGreen,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: Text(
+          'Ongeza Chakula/Huduma',
+          style: GoogleFonts.montserrat(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+}

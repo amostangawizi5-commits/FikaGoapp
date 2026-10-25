@@ -1,0 +1,160 @@
+{
+  "app_name": "FikaGo",
+  "tagline": "We deliver to you",
+  
+  "splash": {
+    "loading": "Loading..."
+  },
+
+  "auth": {
+    "welcome": "Welcome to FikaGo",
+    "login_subtitle": "Login with your phone number and password",
+    "register_subtitle": "Fill in your details to start ordering",
+    "phone_label": "Phone Number",
+    "phone_hint": "+255 712 345 678",
+    "password_label": "Password",
+    "password_hint": "6 characters or more",
+    "confirm_password_label": "Confirm Password",
+    "confirm_password_hint": "Repeat your password",
+    "fullname_label": "Full Name",
+    "fullname_hint": "e.g., Ali Hassan",
+    "email_label": "Email (Optional)",
+    "email_hint": "e.g., ali@gmail.com",
+    "login_btn": "LOGIN",
+    "register_btn": "REGISTER NOW",
+    "otp_btn": "LOGIN WITH OTP",
+    "send_otp_btn": "SEND OTP",
+    "verify_btn": "VERIFY",
+    "no_account": "Don't have an account? ",
+    "have_account": "Already have an account? ",
+    "register_link": "Register Here",
+    "login_link": "Login Here",
+    "or": "OR",
+    "terms": "By continuing, you agree to our Terms & Privacy",
+    "otp_sent_to": "We sent OTP to",
+    "dev_otp": "DEV OTP",
+    "enter_name": "Enter Your Name",
+    "new_user_btn": "New account? Click here",
+    "existing_user_btn": "Already have an account? (Back)",
+    "errors": {
+      "empty_phone": "Please enter phone number",
+      "invalid_phone": "Number must start with +255 or 0",
+      "short_phone": "Phone number is too short",
+      "empty_password": "Please enter password",
+      "password_mismatch": "Passwords do not match",
+      "short_password": "Password must be 6+ characters",
+      "empty_fields": "Fill in all required fields",
+      "login_failed": "Failed to login",
+      "register_failed": "Failed to register",
+      "otp_failed": "OTP is incorrect or expired"
+    },
+    "success": {
+      "register": "Registration successful! Welcome to FikaGo.",
+      "login": "Welcome back!"
+    }
+  },
+
+  "home": {
+    "greeting": "What do you want to eat today?",
+    "location": "Mikocheni, Dar es Salaam",
+    "search_hint": "Search food, restaurant...",
+    "categories": "Categories",
+    "see_all": "See All",
+    "promo_title": "Free Delivery!",
+    "promo_desc": "On your first order. Use code: FIKA50",
+    "nearby_restaurants": "Nearby Restaurants",
+    "no_restaurants": "No restaurants found",
+    "guest_title": "Welcome Guest!",
+    "guest_desc": "Login to complete your order",
+    "login_now": "LOGIN",
+    "categories_list": {
+      "food": "Food",
+      "grocery": "Grocery",
+      "shops": "Shops",
+      "drinks": "Drinks",
+      "pharmacy": "Pharmacy",
+      "salon": "Salon"
+    }
+  },
+
+  "cart": {
+    "title": "My Cart",
+    "empty_title": "Your Cart is Empty",
+    "empty_desc": "Start ordering delicious food from our restaurants.",
+    "start_shopping": "START SHOPPING",
+    "clear_cart": "Clear Cart?",
+    "clear_desc": "Are you sure you want to remove all items?",
+    "yes": "YES",
+    "no": "NO",
+    "checkout": "PROCEED TO CHECKOUT",
+    "summary": "Order Summary",
+    "subtotal": "Subtotal",
+    "delivery_fee": "Delivery Fee",
+    "service_fee": "Service Fee",
+    "discount": "Discount",
+    "total": "Total"
+  },
+
+  "checkout": {
+    "title": "Complete Order",
+    "delivery_address": "Delivery Address",
+    "address_hint": "e.g., Mikocheni, Near Mwenge",
+    "landmark_hint": "Landmark (Optional)",
+    "phone": "Phone Number",
+    "payment_method": "Payment Method",
+    "cash": "Cash on Delivery",
+    "instructions": "Special Instructions",
+    "instructions_hint": "e.g., No pepper...",
+    "subtotal": "Subtotal",
+    "delivery_fee": "Delivery Fee",
+    "service_fee": "Service Fee",
+    "total": "Total",
+    "place_order": "SEND ORDER",
+    "fill_fields": "Please fill your name, delivery address, and phone number",
+    "order_failed": "Failed to create order",
+    "payment_failed": "Failed to initiate payment",
+    "order_success": "Your order has been received!"
+  },
+
+  "orders": {
+    "title": "My Orders",
+    "tab_active": "Active",
+    "tab_history": "History",
+    "track": "Track",
+    "total": "Total"
+  },
+
+  "wallet": {
+    "title": "My Wallet",
+    "balance": "MY BALANCE",
+    "add_money": "ADD MONEY",
+    "withdraw": "WITHDRAW",
+    "pending": "Pending",
+    "points": "Loyalty Points",
+    "history": "Payment History",
+    "see_all": "See All",
+    "payment": "Payment",
+    "top_up": "Top Up",
+    "refund": "Refund"
+  },
+
+  "profile": {
+    "title": "My Profile",
+    "guest": "Guest",
+    "not_logged_in": "Not Logged In",
+    "addresses": "My Addresses",
+    "payment_methods": "Payment Methods",
+    "notifications": "Notifications",
+    "language": "Language",
+    "help": "Help & Support",
+    "logout": "LOGOUT"
+  },
+  "vendor_profile": {
+    "store_info": "Store Information",
+    "opening_hours": "Opening Hours",
+    "language": "Language",
+    "help": "Help & Support",
+    "logout": "LOGOUT",
+    "logout_confirm": "Logout?"
+  }
+}

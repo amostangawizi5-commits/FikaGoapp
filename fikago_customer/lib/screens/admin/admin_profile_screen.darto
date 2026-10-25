@@ -1,0 +1,83 @@
+// ============================================================
+// FIKAGO ADMIN - PROFILE
+// ============================================================
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../config/theme.dart';
+import '../../providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import '../auth/role_selection_screen.dart';
+
+class AdminProfileScreen extends StatelessWidget {
+  const AdminProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: FikaGoColors.lightGrey,
+      appBar: AppBar(
+        title: Text('Admin Profile',
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: FikaGoColors.charcoal,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Center(
+            child: Column(
+              children: [
+                const CircleAvatar(
+                  radius: 50,
+                  backgroundColor: FikaGoColors.lightGreen,
+                  child: Icon(Icons.admin_panel_settings,
+                      size: 50, color: FikaGoColors.forestGreen),
+                ),
+                const SizedBox(height: 16),
+                Text('FikaGo Admin',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 20, fontWeight: FontWeight.bold)),
+                Text('admin@fikago.co.tz',
+                    style: GoogleFonts.montserrat(color: FikaGoColors.grey)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          ListTile(
+            leading:
+                const Icon(Icons.language, color: FikaGoColors.forestGreen),
+            title: Text('Language', style: GoogleFonts.montserrat()),
+            trailing: const Text('Kiswahili'),
+            onTap: () {},
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock, color: FikaGoColors.forestGreen),
+            title: Text('Change Password', style: GoogleFonts.montserrat()),
+            onTap: () {},
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () async {
+              await context.read<AuthProvider>().logout();
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                (route) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: FikaGoColors.red.withValues(alpha: 0.1),
+              foregroundColor: FikaGoColors.red,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: Text('LOGOUT',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+}

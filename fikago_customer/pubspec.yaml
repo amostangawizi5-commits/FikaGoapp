@@ -1,0 +1,49 @@
+name: fikago_customer
+description: FikaGo Customer App - Tanzania Food Delivery
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.1.0
+  http_parser: ^4.1.2
+  provider: ^6.1.1
+  shared_preferences: ^2.2.2
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.0
+  intl: ^0.20.2
+  url_launcher: ^6.2.1
+  easy_localization: ^3.0.3
+  flutter_launcher_icons: ^0.14.4
+  image_picker: ^1.0.7
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/translations/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/applogo.png
+  min_sdk_android: 21
+
+dependency_overrides:
+  image:
+    path: third_party/image
