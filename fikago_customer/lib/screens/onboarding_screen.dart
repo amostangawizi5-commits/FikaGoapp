@@ -96,9 +96,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
                 child: Row(
                   children: [
-                    Text(
+                    const Text(
                       'FikaGo',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: FikaGoColors.lightGreen,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -122,7 +122,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 color: index <= _currentPage
                                     ? FikaGoColors.sunYellow
                                     : FikaGoColors.lightGreen
-                                        .withOpacity(0.28),
+                                        .withValues(alpha: 0.28),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -258,7 +258,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: FikaGoColors.lightGreen.withOpacity(0.82),
+                        color: FikaGoColors.lightGreen.withValues(alpha: 0.82),
                         height: 1.45,
                       ),
                     ),
@@ -283,11 +283,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           color: FikaGoColors.lightGreen,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: FikaGoColors.forestGreen.withOpacity(0.12),
+            color: FikaGoColors.forestGreen.withValues(alpha: 0.12),
           ),
           boxShadow: [
             BoxShadow(
-              color: FikaGoColors.forestGreen.withOpacity(0.14),
+              color: FikaGoColors.forestGreen.withValues(alpha: 0.14),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -304,7 +304,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       height: 220,
       width: 220,
       decoration: BoxDecoration(
-        color: (data['color'] as Color).withOpacity(0.14),
+        color: (data['color'] as Color).withValues(alpha: 0.14),
         shape: BoxShape.circle,
       ),
       child: Icon(
@@ -334,7 +334,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: FikaGoColors.forestGreen.withOpacity(0.15),
+                    color: FikaGoColors.forestGreen.withValues(alpha: 0.15),
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -363,7 +363,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: FikaGoColors.charcoal.withOpacity(0.18),
+                    color: FikaGoColors.charcoal.withValues(alpha: 0.18),
                     blurRadius: 16,
                     offset: const Offset(0, 7),
                   ),

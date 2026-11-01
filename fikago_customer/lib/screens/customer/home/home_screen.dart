@@ -858,11 +858,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _foodPlaceholder() => ColoredBox(
+  Widget _foodPlaceholder() => const ColoredBox(
         color: FikaGoColors.lightGreen,
-        child: const Center(
-          child:
-              Icon(Icons.fastfood, color: FikaGoColors.forestGreen, size: 32),
+        child: Center(
+          child: Icon(Icons.fastfood,
+              color: FikaGoColors.forestGreen, size: 32),
         ),
       );
 }

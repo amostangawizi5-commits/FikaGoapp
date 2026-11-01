@@ -38,7 +38,8 @@ class _MenuItemDetailScreenState extends State<MenuItemDetailScreen> {
   Future<void> _addToCart() async {
     setState(() => _isAdding = true);
     final cart = context.read<CartProvider>();
-    final added = context.read<AuthProvider>().isLoggedIn
+    final isLoggedIn = context.read<AuthProvider>().isLoggedIn;
+    final added = isLoggedIn
         ? await cart.addToCart(
             menuItemId: widget.item.id,
             quantity: _quantity,
@@ -524,9 +525,9 @@ class _MenuItemDetailScreenState extends State<MenuItemDetailScreen> {
         ),
       );
 
-  Widget _imagePlaceholder() => ColoredBox(
+  Widget _imagePlaceholder() => const ColoredBox(
         color: FikaGoColors.lightGreen,
-        child: const Center(
+        child: Center(
             child: Icon(Icons.fastfood,
                 size: 50, color: FikaGoColors.forestGreen)),
       );

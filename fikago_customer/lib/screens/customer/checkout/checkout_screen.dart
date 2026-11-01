@@ -235,7 +235,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   title: Text(context.localized(
                       'Eneo ulipo sasa', 'Your current location')),
                   subtitle: Text(
-                    _addressForLocation(nearbyLocation!),
+                    _addressForLocation(nearbyLocation),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -710,8 +710,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     RadioGroup<String>(
                       groupValue: _selectedPayment,
                       onChanged: (value) {
-                        if (value != null)
+                        if (value != null) {
                           setState(() => _selectedPayment = value);
+                        }
                       },
                       child: Column(children: [
                         _paymentOption('mpesa', 'M-Pesa', Icons.phone_android),

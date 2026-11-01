@@ -9,7 +9,7 @@ import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
 
-import 'screens/onboardingScreen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/auth/staff_access_screen.dart';
 
 void main() async {
@@ -44,7 +44,7 @@ class FikaGoApp extends StatelessWidget {
         localizationsDelegates: context.localizationDelegates,
         supportedLocales: context.supportedLocales,
         locale: context.locale,
-        home: const OnboardingScreen(),
+        home: const SplashScreen(),
         routes: {
           '/staff-access': (_) => const StaffAccessScreen(),
         },

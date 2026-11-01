@@ -417,9 +417,9 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _foodPlaceholder() => ColoredBox(
+  Widget _foodPlaceholder() => const ColoredBox(
         color: FikaGoColors.lightGreen,
-        child: const Center(
+        child: Center(
           child: Icon(Icons.fastfood, color: FikaGoColors.forestGreen),
         ),
       );

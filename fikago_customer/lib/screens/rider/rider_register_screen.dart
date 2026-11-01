@@ -2,7 +2,6 @@
 // FIKAGO RIDER - REGISTRATION (Bolt Style)
 // ============================================================
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/app_localizations.dart';
@@ -165,7 +164,7 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
 
                 // Dropdown ya Gari
                 DropdownButtonFormField<String>(
-                  value: _vehicleType,
+                  initialValue: _vehicleType,
                   decoration: InputDecoration(
                     labelText:
                         context.localized('Aina ya Gari', 'Vehicle type'),
