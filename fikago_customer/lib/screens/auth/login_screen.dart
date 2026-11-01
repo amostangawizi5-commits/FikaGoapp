@@ -251,8 +251,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: const Icon(Icons.arrow_back, size: 19),
                               label: Text(
                                 context.localized(
-                                  'Rudi kwenye uchaguzi wa akaunti',
-                                  'Back to role selection',
+                                  '',
+                                  '',
                                 ),
                                 style: GoogleFonts.montserrat(
                                   fontSize: 12,
