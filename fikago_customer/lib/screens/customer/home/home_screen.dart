@@ -6,17 +6,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../config/app_localizations.dart';
 import '../../../config/theme.dart';
-import '../../../models/restaurant_model.dart';
-import '../../../providers/auth_provider.dart';
+import '../../../models/menu_item_model.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../services/restaurant_service.dart';
 import '../../../services/location_service.dart';
-import '../../auth/login_screen.dart';
 import '../cart/cart_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/profile_screen.dart';
-import '../wallet/wallet_screen.dart';
-import 'restaurant_detail_screen.dart';
+import 'search_screen.dart';
+import 'menu_item_detail_screen.dart';
 import 'category_items_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,19 +26,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  List<Restaurant> _restaurants = [];
-  bool _isLoading = true;
-  String _searchQuery = '';
-  String? _selectedCategory;
+  List<Map<String, dynamic>> _foodItems = [];
+  bool _isLoadingFoods = true;
   String? _currentCity;
   String? _currentAddress;
-  String? _locationAttribution;
   bool _isLocating = true;
 
   @override
   void initState() {
     super.initState();
-    _loadRestaurants();
+    _loadHomeFoods();
     _loadCustomerLocation();
   }
 
@@ -53,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _currentCity = location?.city;
         _currentAddress = location?.address;
-        _locationAttribution = location?.attribution;
         _isLocating = false;
       });
     } catch (_) {
@@ -65,31 +59,33 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadRestaurants() async {
-    setState(() => _isLoading = true);
-    final response = await RestaurantService.getRestaurants(
-      search: _searchQuery.isEmpty ? null : _searchQuery,
-      category: _selectedCategory,
-    );
-
-    if (response['success'] == true) {
-      final data = response['data'] as List;
-      setState(() {
-        _restaurants = data.map((e) => Restaurant.fromJson(e)).toList();
-        _isLoading = false;
-      });
-    } else {
-      setState(() => _isLoading = false);
-    }
+  Future<void> _loadHomeFoods() async {
+    if (mounted) setState(() => _isLoadingFoods = true);
+    final response = await RestaurantService.getFeaturedMenuItems();
+    if (!mounted) return;
+    setState(() {
+      _foodItems = response['success'] == true && response['data'] is List
+          ? (response['data'] as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList()
+          : [];
+      _isLoadingFoods = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       _buildHomeTab(),
-      const OrdersScreen(),
-      const WalletScreen(),
-      const ProfileScreen(),
+      SearchScreen(
+        onNavigateToTab: (index) => setState(() => _currentIndex = index),
+      ),
+      OrdersScreen(
+        onNavigateToTab: (index) => setState(() => _currentIndex = index),
+      ),
+      ProfileScreen(
+        onNavigateToTab: (index) => setState(() => _currentIndex = index),
+      ),
     ];
 
     final width = MediaQuery.sizeOf(context).width;
@@ -110,28 +106,41 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
 
       // ============================================
-      // BOTTOM NAVIGATION (Modern Design)
+      // BOTTOM NAVIGATION
       // ============================================
-      bottomNavigationBar: BottomAppBar(
-        color: FikaGoColors.lightGreen,
-        elevation: 10,
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home_outlined, Icons.home,
-                  context.localized('Nyumbani', 'Home'), 0),
-              _buildNavItem(Icons.receipt_long_outlined, Icons.receipt_long,
-                  context.localized('Oda', 'Orders'), 1),
-              _buildNavItem(
-                  Icons.account_balance_wallet_outlined,
-                  Icons.account_balance_wallet,
-                  context.localized('Wallet', 'Wallet'),
-                  2),
-              _buildNavItem(Icons.person_outline, Icons.person,
-                  context.localized('Wasifu', 'Profile'), 3),
-            ],
+      bottomNavigationBar: Container(
+        color: Colors.white,
+        child: SafeArea(
+          top: false,
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(
+                  color: FikaGoColors.charcoal.withValues(alpha: 0.08),
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, -3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                _buildNavItem(Icons.home_outlined, Icons.home,
+                    context.localized('Nyumbani', 'Home'), 0),
+                _buildNavItem(Icons.search, Icons.search,
+                    context.localized('Tafuta', 'Search'), 1),
+                _buildNavItem(Icons.receipt_long_outlined, Icons.receipt_long,
+                    context.localized('Oda', 'Orders'), 2),
+                _buildNavItem(Icons.person_outline, Icons.person,
+                    context.localized('Wasifu', 'Profile'), 3),
+              ],
+            ),
           ),
         ),
       ),
@@ -246,16 +255,16 @@ class _HomeScreenState extends State<HomeScreen> {
           Icons.home
         ),
         (
+          Icons.search,
+          context.localized('Tafuta', 'Search'),
+          Icons.search,
+          Icons.search
+        ),
+        (
           Icons.receipt_long,
           context.localized('Oda', 'Orders'),
           Icons.receipt_long_outlined,
           Icons.receipt_long
-        ),
-        (
-          Icons.account_balance_wallet,
-          context.localized('Wallet', 'Wallet'),
-          Icons.account_balance_wallet_outlined,
-          Icons.account_balance_wallet
         ),
         (
           Icons.person,
@@ -273,41 +282,45 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: FikaGoColors.forestGreen,
         tooltip: context.localized('Fungua kikapu', 'Open cart'),
         child: Consumer<CartProvider>(
-          builder: (context, cart, _) => Badge(
-            isLabelVisible: cart.itemCount > 0,
-            label: Text('${cart.itemCount}'),
-            child: const Icon(Icons.shopping_bag_outlined,
-                color: FikaGoColors.lightGreen),
-          ),
+          builder: (context, cart, _) {
+            final itemCount = cart.itemCount;
+            return Badge(
+              isLabelVisible: itemCount > 0,
+              label: Text('$itemCount'),
+              child: const Icon(Icons.shopping_bag_outlined,
+                  color: FikaGoColors.lightGreen),
+            );
+          },
         ),
       );
 
   Widget _buildNavItem(
       IconData icon, IconData activeIcon, String label, int index) {
     final isSelected = _currentIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            isSelected ? activeIcon : icon,
-            color:
-                isSelected ? FikaGoColors.forestGreen : FikaGoColors.charcoal,
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.montserrat(
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color:
-                  isSelected ? FikaGoColors.forestGreen : FikaGoColors.charcoal,
+    final color = isSelected ? FikaGoColors.forestGreen : FikaGoColors.grey;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _currentIndex = index),
+        child: Column(
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? activeIcon : icon,
+              color: color,
+              size: 23,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.montserrat(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -316,7 +329,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // HOME TAB CONTENT (Modern UI)
   // ============================================================
   Widget _buildHomeTab() {
-    final authProvider = context.watch<AuthProvider>();
     final locationParts = [
       if (_currentAddress?.isNotEmpty == true) _currentAddress!,
       if (_currentCity?.isNotEmpty == true &&
@@ -332,94 +344,97 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: _loadRestaurants,
+        onRefresh: _loadHomeFoods,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. LOGO KATIKATI (Center Top)
-              Center(
-                child: Image.asset(
-                  'assets/images/fikaGO.png',
-                  height: 50,
-                  fit: BoxFit.contain,
+              Container(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+                decoration: BoxDecoration(
+                  color: FikaGoColors.forestGreen,
+                  borderRadius: BorderRadius.circular(24),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // 2. LOCATION & PROFILE
-              Row(
-                children: [
-                  const Icon(Icons.location_on,
-                      color: FikaGoColors.forestGreen, size: 20),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          _isLocating
-                              ? context.localized('Inatafuta eneo lako...',
-                                  'Finding your location...')
-                              : locationLabel,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.montserrat(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                        const Icon(Icons.location_on,
+                            color: Colors.white, size: 21),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('FikaGo',
+                                  style: GoogleFonts.montserrat(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold)),
+                              Text(
+                                _isLocating
+                                    ? context.localized('Inatafuta eneo...',
+                                        'Finding your location...')
+                                    : locationLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.montserrat(
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    fontSize: 10),
+                              ),
+                            ],
                           ),
                         ),
-                        if (_locationAttribution != null)
-                          Text(
-                            _locationAttribution!,
-                            style: GoogleFonts.montserrat(
-                                fontSize: 9, color: FikaGoColors.grey),
+                        if (!_isLocating)
+                          IconButton(
+                            tooltip:
+                                context.localized(
+                                    'Sasisha eneo', 'Refresh location'),
+                            onPressed: () => _loadCustomerLocation(
+                                openSettingsIfUnavailable: true),
+                            icon: const Icon(Icons.my_location,
+                                color: Colors.white, size: 20),
                           ),
+                        IconButton(
+                          tooltip: context.localized('Wasifu', 'Profile'),
+                          onPressed: () => setState(() => _currentIndex = 3),
+                          icon: const Icon(Icons.person_outline,
+                              color: Colors.white),
+                        ),
                       ],
                     ),
-                  ),
-                  if (!_isLocating &&
-                      (_currentCity == null || _currentCity!.isEmpty) &&
-                      (_currentAddress == null || _currentAddress!.isEmpty))
-                    IconButton(
-                      tooltip: context.localized('Jaribu tena', 'Try again'),
-                      onPressed: () => _loadCustomerLocation(
-                        openSettingsIfUnavailable: true,
+                    const SizedBox(height: 18),
+                    Text(
+                      context.localized('Njaa? Tunakufikishia haraka!',
+                          'Hungry? We bring it to you!'),
+                      style: GoogleFonts.montserrat(
+                        fontSize: 23,
+                        height: 1.1,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      icon: const Icon(Icons.my_location,
-                          color: FikaGoColors.forestGreen),
-                    )
-                  else
-                    const SizedBox(width: 8),
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: FikaGoColors.lightGreen,
-                    child: Icon(Icons.person,
-                        color: FikaGoColors.forestGreen, size: 20),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // 3. GREETING
-              Text(
-                context.localized('Leo unataka kula nini?',
-                    'What would you like to eat today?'),
-                style: GoogleFonts.montserrat(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: FikaGoColors.charcoal,
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      context.localized(
+                        'Chakula unachopenda, kimefika mlangoni mwako.',
+                        'Your favorite food, delivered to your door.',
+                      ),
+                      style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.86)),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
 
               // 4. SEARCH BAR
               TextField(
-                onSubmitted: (value) {
-                  setState(() => _searchQuery = value);
-                  _loadRestaurants();
-                },
+                readOnly: true,
+                onTap: () => setState(() => _currentIndex = 1),
                 decoration: InputDecoration(
                   hintText: context.localized('Tafuta chakula au mgahawa...',
                       'Search food or restaurants...'),
@@ -437,66 +452,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 5. LOGIN BANNER (Kama hajaingia)
-              if (!authProvider.isLoggedIn)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 24),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: FikaGoColors.sunYellow.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: FikaGoColors.sunYellow),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline,
-                          color: FikaGoColors.forestGreen),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.localized(
-                                  'Karibu Mgeni!', 'Welcome, Guest!'),
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Text(
-                              context.localized(
-                                'Chagua chakula; utajaza taarifa za usajili ukiweka oda.',
-                                'Choose your food; you can register when adding it to your order.',
-                              ),
-                              style: GoogleFonts.montserrat(
-                                fontSize: 12,
-                                color: FikaGoColors.charcoal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const LoginScreen()),
-                          );
-                        },
-                        child: Text(
-                          context.localized('INGIA', 'LOG IN'),
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.bold,
-                            color: FikaGoColors.forestGreen,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
               // 6. CATEGORIES (Kama kwenye picha - Cards)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -509,10 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      setState(() => _selectedCategory = null);
-                      _loadRestaurants();
-                    },
+                    onPressed: () => setState(() => _currentIndex = 1),
                     child: Text(
                       context.localized('Ona Zote', 'See all'),
                       style: GoogleFonts.montserrat(
@@ -648,44 +600,48 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 8. RESTAURANTS
+              // 8. AVAILABLE FOOD FROM RESTAURANTS
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     context.localized(
-                        'Migahawa Iliyo Karibu', 'Nearby Restaurants'),
+                        'Vyakula Vinavyopatikana', 'Food Near You'),
                     style: GoogleFonts.montserrat(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
-                    context.localized('Ona Yote', 'See all'),
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      color: FikaGoColors.forestGreen,
-                      fontWeight: FontWeight.w600,
+                  TextButton(
+                    onPressed: () => setState(() => _currentIndex = 1),
+                    child: Text(
+                      context.localized('Ona Yote', 'See all'),
+                      style: GoogleFonts.montserrat(
+                        fontSize: 12,
+                        color: FikaGoColors.forestGreen,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
 
-              if (_isLoading)
+              if (_isLoadingFoods)
                 const Center(child: CircularProgressIndicator())
-              else if (_restaurants.isEmpty)
+              else if (_foodItems.isEmpty)
                 Center(
                   child: Text(
-                    context.localized('Hakuna migahawa iliyopatikana',
-                        'No restaurants found'),
+                    context.localized(
+                        'Hakuna chakula kinachopatikana kwa sasa.',
+                        'No food is available right now.'),
                     style: GoogleFonts.montserrat(color: FikaGoColors.charcoal),
                   ),
                 )
               else
-                ..._restaurants.map((r) => _restaurantCard(r)),
+                ..._foodItems.take(10).map(_foodCard),
 
-              const SizedBox(height: 80), // Nafasi ya FAB
+              const SizedBox(height: 88), // Nafasi ya FAB
             ],
           ),
         ),
@@ -764,98 +720,130 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Restaurant Card
-  Widget _restaurantCard(Restaurant r) {
+  Future<void> _openFoodDetails(Map<String, dynamic> data) async {
+    final item = MenuItem.fromJson(data);
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MenuItemDetailScreen(
+          item: item,
+          restaurantName: data['restaurant_name']?.toString() ?? '',
+          restaurantRating:
+              double.tryParse(data['rating_avg']?.toString() ?? ''),
+          reviewCount: int.tryParse(data['review_count']?.toString() ?? ''),
+          onNavigateToTab: (index) => setState(() => _currentIndex = index),
+        ),
+      ),
+    );
+  }
+
+  Widget _foodCard(Map<String, dynamic> data) {
+    final item = MenuItem.fromJson(data);
+    final restaurant = data['restaurant_name']?.toString() ?? 'FikaGo';
+    final rating = double.tryParse(data['rating_avg']?.toString() ?? '') ?? 0;
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: FikaGoColors.lightGreen,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
         boxShadow: [
           BoxShadow(
-            color: FikaGoColors.charcoal.withValues(alpha: 0.1),
-            spreadRadius: 2,
-            blurRadius: 10,
+            color: FikaGoColors.charcoal.withValues(alpha: 0.09),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => RestaurantDetailScreen(restaurant: r),
-            ),
-          );
-        },
+        borderRadius: BorderRadius.circular(17),
+        onTap: () => _openFoodDetails(data),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Row(
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: FikaGoColors.lightGreen,
-                  borderRadius: BorderRadius.circular(16),
-                  image: r.logoUrl != null
-                      ? DecorationImage(
-                          image: NetworkImage(r.logoUrl!),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(13),
+                child: SizedBox(
+                  width: 82,
+                  height: 82,
+                  child: item.imageUrl?.isNotEmpty == true
+                      ? Image.network(item.imageUrl!,
                           fit: BoxFit.cover,
-                        )
-                      : null,
+                          errorBuilder: (_, __, ___) => _foodPlaceholder())
+                      : _foodPlaceholder(),
                 ),
-                child: r.logoUrl == null
-                    ? const Icon(Icons.restaurant,
-                        color: FikaGoColors.forestGreen, size: 40)
-                    : null,
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 11),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      r.name,
-                      style: GoogleFonts.montserrat(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      r.address ??
-                          context.localized(
-                              'Eneo halipo', 'Address unavailable'),
-                      style: GoogleFonts.montserrat(
-                        fontSize: 12,
-                        color: FikaGoColors.charcoal,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    Text('$restaurant - ${item.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         const Icon(Icons.star,
-                            size: 16, color: FikaGoColors.sunYellow),
-                        const SizedBox(width: 4),
-                        Text(
-                          r.ratingAvg.toStringAsFixed(1),
-                          style: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            size: 14, color: FikaGoColors.sunYellow),
+                        const SizedBox(width: 3),
+                        Text(rating.toStringAsFixed(1),
+                            style: GoogleFonts.montserrat(
+                                fontSize: 10, fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.schedule,
+                            size: 12, color: FikaGoColors.grey),
+                        const SizedBox(width: 3),
+                        Text('${item.preparationTime} min',
+                            style: GoogleFonts.montserrat(
+                                fontSize: 9, color: FikaGoColors.grey)),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: FikaGoColors.forestGreen,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            context.localized('DELIVERY', 'DELIVERY'),
+                            style: GoogleFonts.montserrat(
+                                color: Colors.white,
+                                fontSize: 7,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.timer,
-                            size: 16, color: FikaGoColors.charcoal),
-                        const SizedBox(width: 4),
-                        Text(
-                          '30 min',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            color: FikaGoColors.charcoal,
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('TZS ${item.price.toStringAsFixed(0)}',
+                              maxLines: 1,
+                              style: GoogleFonts.montserrat(
+                                  color: FikaGoColors.forestGreen,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        SizedBox(
+                          height: 32,
+                          child: FilledButton(
+                            onPressed: () => _openFoodDetails(data),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: FikaGoColors.sunYellow,
+                              foregroundColor: FikaGoColors.charcoal,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 18),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9)),
+                            ),
+                            child: Text(context.localized('Agiza', 'Order'),
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -863,12 +851,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios,
-                  size: 16, color: FikaGoColors.charcoal),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _foodPlaceholder() => ColoredBox(
+        color: FikaGoColors.lightGreen,
+        child: const Center(
+          child:
+              Icon(Icons.fastfood, color: FikaGoColors.forestGreen, size: 32),
+        ),
+      );
 }

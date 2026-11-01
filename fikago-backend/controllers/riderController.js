@@ -10,10 +10,21 @@ const updateStatus = async (req, res) => {
     const riderId = req.user.id;
     const { is_online } = req.body;
 
-    await pool.query(
+    if (is_online === false) {
+      const active = await pool.query(
+        'SELECT is_busy FROM rider_profiles WHERE user_id = $1', [riderId]
+      );
+      if (!active.rows.length) return error(res, 'Rider profile haipo', 404);
+      if (active.rows[0].is_busy) {
+        return error(res, 'Maliza oda uliyonayo kabla ya kutoka online', 409);
+      }
+    }
+
+    const result = await pool.query(
       `UPDATE rider_profiles SET is_online = $1, updated_at = NOW()
-       WHERE user_id = $2`, [is_online, riderId]
+       WHERE user_id = $2 RETURNING is_online`, [is_online, riderId]
     );
+    if (!result.rows.length) return error(res, 'Rider profile haipo', 404);
     return success(res, { is_online }, 'Status imesasishwa');
   } catch (err) {
     return error(res, 'Imeshindwa kusasisha status', 500);
@@ -75,7 +86,7 @@ const getAssignments = async (req, res) => {
            JOIN restaurants r ON o.restaurant_id = r.id
            JOIN users u ON o.customer_id = u.id
            WHERE da.rider_id = $1 AND da.status = 'pending'
-             AND o.rider_id = $1
+             AND o.rider_id = $1 AND o.status = 'ready'
            UNION ALL
            SELECT -o.id AS id, o.id AS order_id, $1 AS rider_id,
                   r.owner_id AS vendor_id, 'pending' AS status,
@@ -90,7 +101,7 @@ const getAssignments = async (req, res) => {
            FROM orders o
            JOIN restaurants r ON o.restaurant_id = r.id
            JOIN users u ON o.customer_id = u.id
-           WHERE o.status IN ('pending', 'confirmed', 'preparing', 'ready')
+           WHERE o.status = 'ready'
              AND o.rider_id IS NULL
              AND r.is_approved = TRUE AND r.is_active = TRUE
              AND EXISTS (
@@ -146,29 +157,61 @@ const acceptAssignment = async (req, res) => {
     return acceptOpenOrder(Math.abs(assignmentId), req.user.id, res);
   }
 
+  const client = await pool.connect();
   try {
-    const { id } = req.params;
+    await client.query('BEGIN');
+    const id = Number(req.params.id);
     const riderId = req.user.id;
 
-    const result = await pool.query(
+    const riderResult = await client.query(
+      `SELECT is_approved, is_online, is_busy
+       FROM rider_profiles WHERE user_id = $1 FOR UPDATE`, [riderId]
+    );
+    if (!riderResult.rows.length || !riderResult.rows[0].is_approved ||
+        !riderResult.rows[0].is_online || riderResult.rows[0].is_busy) {
+      await client.query('ROLLBACK');
+      return error(res, 'Rider lazima awe online na asiwe na oda nyingine', 409);
+    }
+
+    const result = await client.query(
       `UPDATE delivery_assignments SET status = 'accepted', accepted_at = NOW()
        WHERE id = $1 AND rider_id = $2 AND status = 'pending'
+         AND EXISTS (SELECT 1 FROM orders WHERE orders.id = delivery_assignments.order_id
+                     AND orders.status = 'ready')
        RETURNING *`, [id, riderId]
     );
-    if (result.rows.length === 0) return error(res, 'Assignment haipo', 404);
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Assignment haipo', 404);
+    }
 
-    await pool.query(
+    const orderResult = await client.query(
+      `UPDATE orders SET status = 'rider_assigned'
+       WHERE id = $1 AND rider_id = $2 AND status = 'ready'
+       RETURNING id`, [result.rows[0].order_id, riderId]
+    );
+    if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Oda hii haiwezi kupelekwa na rider huyu', 409);
+    }
+
+    await client.query(
       `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
-       VALUES ($1, 'rider_accepted', $2, 'Rider accepted')`,
+       VALUES ($1, 'rider_assigned', $2, 'Rider accepted assignment and is heading to restaurant')`,
       [result.rows[0].order_id, riderId]
     );
-    await pool.query(
+    await client.query(
       'UPDATE rider_profiles SET is_busy = TRUE WHERE user_id = $1', [riderId]
     );
 
+    await client.query('COMMIT');
     return success(res, result.rows[0], 'Assignment imekubaliwa');
   } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Rider accept assignment failed:', err);
     return error(res, 'Imeshindwa kukubali', 500);
+  } finally {
+    client.release();
   }
 };
 
@@ -190,7 +233,7 @@ const acceptOpenOrder = async (orderId, riderId, res) => {
       `SELECT o.id, o.rider_payout, r.owner_id AS vendor_id
        FROM orders o
        JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE o.id = $1 AND o.status IN ('pending', 'confirmed', 'preparing', 'ready')
+       WHERE o.id = $1 AND o.status = 'ready'
          AND o.rider_id IS NULL
          AND NOT EXISTS (
            SELECT 1 FROM delivery_assignments da
@@ -218,7 +261,7 @@ const acceptOpenOrder = async (orderId, riderId, res) => {
     );
     await client.query(
       `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
-       VALUES ($1, 'rider_accepted', $2, 'Rider accepted open order')`,
+       VALUES ($1, 'rider_assigned', $2, 'Rider accepted open order and is heading to restaurant')`,
       [orderId, riderId],
     );
     await client.query(
@@ -248,7 +291,7 @@ const declineAssignment = async (req, res) => {
          SELECT o.id, $2, r.owner_id, 'cancelled', o.rider_payout, 'Declined by rider'
          FROM orders o
          JOIN restaurants r ON r.id = o.restaurant_id
-         WHERE o.id = $1 AND o.status IN ('confirmed', 'preparing', 'ready')
+         WHERE o.id = $1 AND o.status = 'ready'
            AND o.rider_id IS NULL
            AND NOT EXISTS (
              SELECT 1 FROM delivery_assignments active
@@ -291,104 +334,59 @@ const declineAssignment = async (req, res) => {
 
 // PUT /api/rider/assignments/:id/pickup
 const markPickedUp = async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { id } = req.params;
     const riderId = req.user.id;
 
-    await pool.query(
-      `UPDATE delivery_assignments SET status = 'picked_up', picked_up_at = NOW()
-       WHERE id = $1 AND rider_id = $2`, [id, riderId]
+    const assignment = await client.query(
+      `SELECT id, order_id, status FROM delivery_assignments
+       WHERE id = $1 AND rider_id = $2 FOR UPDATE`, [id, riderId]
     );
+    if (assignment.rows.length === 0 ||
+        !['accepted', 'arrived_at_restaurant'].includes(assignment.rows[0].status)) {
+      await client.query('ROLLBACK');
+      return error(res, 'Assignment hii haipo au tayari imeshaanza safari', 409);
+    }
 
-    const assignment = await pool.query('SELECT order_id FROM delivery_assignments WHERE id = $1', [id]);
-    await pool.query('UPDATE orders SET status = $1 WHERE id = $2',
-      ['picked_up', assignment.rows[0].order_id]);
-    await pool.query(
+    await client.query(
+      `UPDATE delivery_assignments SET status = 'picked_up', picked_up_at = NOW()
+       WHERE id = $1`, [id]
+    );
+    const orderUpdate = await client.query(
+      `UPDATE orders SET status = 'picked_up'
+       WHERE id = $1 AND rider_id = $2 AND status = 'rider_assigned'
+       RETURNING id`, [assignment.rows[0].order_id, riderId]
+    );
+    if (orderUpdate.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Oda hii haiwezi kuanzisha safari', 409);
+    }
+    await client.query(
       `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
        VALUES ($1, 'picked_up', $2, 'Picked up by rider')`,
       [assignment.rows[0].order_id, riderId]
     );
 
+    await client.query('COMMIT');
     return success(res, null, 'Chakula kimechukuliwa');
   } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Rider pickup update failed:', err);
     return error(res, 'Imeshindwa', 500);
+  } finally {
+    client.release();
   }
 };
 
 // PUT /api/rider/assignments/:id/deliver
 const markDelivered = async (req, res) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const { id } = req.params;
-    const { delivery_code } = req.body;
-    const riderId = req.user.id;
-
-    const assignment = await client.query(
-      'SELECT * FROM delivery_assignments WHERE id = $1 AND rider_id = $2', [id, riderId]
-    );
-    if (assignment.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return error(res, 'Assignment haipo', 404);
-    }
-
-    const order = await client.query('SELECT * FROM orders WHERE id = $1', [assignment.rows[0].order_id]);
-
-    // Update order
-    await client.query(
-      `UPDATE orders SET status = 'delivered', payment_status = 'released',
-       delivered_at = NOW(), payout_released_at = NOW() WHERE id = $1`,
-      [order.rows[0].id]
-    );
-
-    // Update assignment
-    await client.query(
-      `UPDATE delivery_assignments SET status = 'delivered', delivered_at = NOW()
-       WHERE id = $1`, [id]
-    );
-
-    // Release escrow kwa rider na vendor
-    const riderPayout = parseFloat(order.rows[0].rider_payout) || 0;
-    const vendorPayout = parseFloat(order.rows[0].vendor_payout) || 0;
-
-    await client.query(
-      `UPDATE wallets SET balance = balance + $1, total_earned = total_earned + $1,
-       pending_balance = GREATEST(pending_balance - $1, 0), updated_at = NOW()
-       WHERE user_id = $2`, [riderPayout, riderId]
-    );
-
-    // Update rider stats
-    await client.query(
-      `UPDATE rider_profiles SET is_busy = FALSE, total_deliveries = total_deliveries + 1
-       WHERE user_id = $1`, [riderId]
-    );
-
-    // Update vendor wallet
-    const vendorUser = await client.query(
-      'SELECT owner_id FROM restaurants WHERE id = $1', [order.rows[0].restaurant_id]
-    );
-    if (vendorUser.rows.length > 0) {
-      await client.query(
-        `UPDATE wallets SET balance = balance + $1, total_earned = total_earned + $1,
-         pending_balance = GREATEST(pending_balance - $1, 0), updated_at = NOW()
-         WHERE user_id = $2`, [vendorPayout, vendorUser.rows[0].owner_id]
-      );
-    }
-
-    await client.query(
-      `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
-       VALUES ($1, 'delivered', $2, 'Delivered - payment released')`,
-      [order.rows[0].id, riderId]
-    );
-
-    await client.query('COMMIT');
-    return success(res, { rider_payout: riderPayout, vendor_payout: vendorPayout }, 'Delivery imekamilika');
+    return error(res, 'Mteja athibitishe kupokea oda kupitia programu yake', 409);
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error(err);
     return error(res, 'Imeshindwa', 500);
-  } finally {
-    client.release();
   }
 };
 

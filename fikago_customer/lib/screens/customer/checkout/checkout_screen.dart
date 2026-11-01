@@ -1,6 +1,8 @@
 // ============================================================
 // FIKAGO - CHECKOUT SCREEN (Professional & Multi-Language)
 // ============================================================
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +18,9 @@ import '../../../utils/phone_number.dart';
 import '../orders/order_ticket_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({super.key});
+  final int cartId;
+
+  const CheckoutScreen({super.key, required this.cartId});
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -70,7 +74,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final city = location.city.trim();
     final parts = [
       if (address.isNotEmpty) address,
-      if (city.isNotEmpty && !address.toLowerCase().contains(city.toLowerCase()))
+      if (city.isNotEmpty &&
+          !address.toLowerCase().contains(city.toLowerCase()))
         city,
     ];
     return parts.isEmpty
@@ -111,21 +116,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _quoteForLocation(CustomerLocation location) async {
     await context.read<CartProvider>().quoteForLocation(
+          cartId: widget.cartId,
           latitude: location.latitude,
           longitude: location.longitude,
         );
   }
 
   Future<void> _showLocationSearch() async {
+    var nearbyLocation = _customerLocation;
+    nearbyLocation ??= await LocationService.getCurrentLocation();
+    if (!mounted) return;
+
     final searchController = TextEditingController();
     List<LocationSearchResult> results = [];
     var searching = false;
     String? searchError;
+    Timer? searchDebounce;
+    var searchRequestId = 0;
 
     Future<void> searchLocations(
         BuildContext sheetContext, StateSetter setSheetState) async {
       final query = searchController.text.trim();
-      if (searching) return;
       if (query.length < 2) {
         setSheetState(() {
           searchError = context.localized(
@@ -135,14 +146,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         });
         return;
       }
+      final requestId = ++searchRequestId;
       setSheetState(() {
         searching = true;
         searchError = null;
         results = [];
       });
       try {
-        final found = await LocationService.search(query);
-        if (!sheetContext.mounted) return;
+        final found = await LocationService.search(
+          query,
+          near: nearbyLocation,
+        );
+        if (!sheetContext.mounted || requestId != searchRequestId) return;
         setSheetState(() {
           results = found;
           searching = false;
@@ -154,7 +169,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           }
         });
       } catch (_) {
-        if (!sheetContext.mounted) return;
+        if (!sheetContext.mounted || requestId != searchRequestId) return;
         setSheetState(() {
           searching = false;
           searchError = context.localized(
@@ -183,7 +198,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 controller: searchController,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: context.localized('Tafuta eneo', 'Search location'),
+                  labelText:
+                      context.localized('Tafuta eneo', 'Search location'),
                   suffixIcon: IconButton(
                     icon: searching
                         ? const CircularProgressIndicator(strokeWidth: 2)
@@ -193,14 +209,54 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         : () => searchLocations(context, setSheetState),
                   ),
                 ),
+                onChanged: (_) {
+                  setSheetState(() {});
+                  searchDebounce?.cancel();
+                  if (searchController.text.trim().length < 2) {
+                    searchRequestId++;
+                    setSheetState(() {
+                      results = [];
+                      searchError = null;
+                      searching = false;
+                    });
+                    return;
+                  }
+                  searchDebounce = Timer(const Duration(milliseconds: 450),
+                      () => searchLocations(context, setSheetState));
+                },
                 onSubmitted: (_) => searchLocations(context, setSheetState),
               ),
+              if (nearbyLocation != null &&
+                  searchController.text.trim().isEmpty)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.my_location,
+                      color: FikaGoColors.forestGreen),
+                  title: Text(context.localized(
+                      'Eneo ulipo sasa', 'Your current location')),
+                  subtitle: Text(
+                    _addressForLocation(nearbyLocation!),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _customerLocation = nearbyLocation;
+                      _addressController.text =
+                          _addressForLocation(nearbyLocation!);
+                      _manualAddressEdited = false;
+                    });
+                    _quoteForLocation(nearbyLocation!);
+                    Navigator.pop(sheetContext);
+                  },
+                ),
               if (searchError != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     searchError!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ),
               const SizedBox(height: 8),
@@ -240,6 +296,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
       ),
     );
+    searchDebounce?.cancel();
     searchController.dispose();
   }
 
@@ -249,18 +306,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(context.localized('Weka pin ya delivery', 'Place delivery pin')),
+        title: Text(
+            context.localized('Weka pin ya delivery', 'Place delivery pin')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: latitudeController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
               decoration: const InputDecoration(labelText: 'Latitude'),
             ),
             TextField(
               controller: longitudeController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
               decoration: const InputDecoration(labelText: 'Longitude'),
             ),
           ],
@@ -273,9 +333,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           FilledButton(
             onPressed: () {
               final latitude = double.tryParse(latitudeController.text.trim());
-              final longitude = double.tryParse(longitudeController.text.trim());
-              if (latitude == null || longitude == null ||
-                  latitude.abs() > 90 || longitude.abs() > 180) {
+              final longitude =
+                  double.tryParse(longitudeController.text.trim());
+              if (latitude == null ||
+                  longitude == null ||
+                  latitude.abs() > 90 ||
+                  longitude.abs() > 180) {
                 return;
               }
               Navigator.pop(dialogContext, true);
@@ -289,10 +352,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final longitude = double.tryParse(longitudeController.text.trim());
     latitudeController.dispose();
     longitudeController.dispose();
-    if (saved != true ||
-        latitude == null ||
-        longitude == null ||
-        !mounted) {
+    if (saved != true || latitude == null || longitude == null || !mounted) {
       return;
     }
     final location = CustomerLocation(
@@ -333,12 +393,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
       return;
     }
+    if (normalizeTzPhone(phone) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.localized(
+            'Ingiza tarakimu 9 za simu baada ya +255.',
+            'Enter the 9 phone digits after +255.',
+          )),
+          backgroundColor: FikaGoColors.charcoal,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
-    final ticketItems = context
-        .read<CartProvider>()
-        .items
+    final cartProvider = context.read<CartProvider>();
+    final selectedCart = cartProvider.cart;
+    final ticketItems = (selectedCart?.items ?? const <dynamic>[])
         .map((item) => {
               'name': item.name,
               'quantity': item.quantity,
@@ -346,10 +418,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               'total_price': item.totalPrice,
             })
         .toList();
-    final orderTotal = context.read<CartProvider>().totalAmount;
+    final orderTotal = selectedCart?.totalAmount ?? 0;
 
     // 1. Unda Oda kwenye Backend
     final orderResponse = await OrderService.createOrder(
+      cartId: widget.cartId,
       customerName: customerName,
       deliveryAddress: address,
       deliveryLandmark: _landmarkController.text.trim(),
@@ -403,7 +476,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (!mounted) return;
 
     // 3. Futa cart na fungua ticket ya oda
-    await context.read<CartProvider>().clearCart();
+    context.read<CartProvider>().removeCompletedCart(widget.cartId);
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -424,7 +497,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           customerName: customerName,
           customerPhone: phone,
           deliveryAddress: address,
-          amount: double.tryParse(createdOrder['total_amount'].toString()) ?? orderTotal,
+          amount: double.tryParse(createdOrder['total_amount'].toString()) ??
+              orderTotal,
           items: ticketItems,
           deliveryLandmark: _landmarkController.text.trim(),
           specialInstructions: _instructionsController.text.trim(),
@@ -442,281 +516,305 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
+    final location = _customerLocation;
+    final hasAddress = _addressController.text.trim().isNotEmpty;
 
     return Scaffold(
-      backgroundColor: FikaGoColors.lightGreen,
+      backgroundColor: const Color(0xFFF4F6F5),
       appBar: AppBar(
-        title: Text(
-          'checkout.title'.tr(),
-          style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: FikaGoColors.lightGreen,
-        foregroundColor: FikaGoColors.charcoal,
+        title: Text('Checkout',
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+        backgroundColor: FikaGoColors.forestGreen,
+        foregroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          tooltip: context.localized('Rudi nyuma', 'Back'),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        actions: [
+          IconButton(
+            tooltip: context.localized('Msaada', 'Help'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(
+                    context.localized('Msaada wa Checkout', 'Checkout help')),
+                content: Text(context.localized(
+                    'Thibitisha eneo na namba yako ya simu, kisha chagua njia ya malipo na tuma oda.',
+                    'Confirm your delivery location and phone number, choose a payment method, then place your order.')),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: Text(context.localized('Sawa', 'Got it')),
+                  ),
+                ],
+              ),
+            ),
+            icon: const Icon(Icons.help_outline),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionTitle(
-                context.localized('Taarifa za mteja', 'Customer details'),
-                Icons.person),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                hintText:
-                    context.localized('Jina lako kamili', 'Your full name'),
-                filled: true,
-                fillColor: FikaGoColors.lightGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // ============================================
-            // 1. DELIVERY ADDRESS
-            // ============================================
-            _sectionTitle('checkout.delivery_address'.tr(), Icons.location_on),
-            const SizedBox(height: 8),
-            if (_customerLocation != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  context.localized(
-                      'Eneo limegunduliwa: ${_addressForLocation(_customerLocation!)}',
-                      'Detected location: ${_addressForLocation(_customerLocation!)}'),
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    color: FikaGoColors.forestGreen,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            TextField(
-              controller: _addressController,
-              onChanged: (_) {
-                if (!_manualAddressEdited) {
-                  setState(() {
-                    _manualAddressEdited = true;
-                    _customerLocation = null;
-                  });
-                }
-              },
-              decoration: InputDecoration(
-                hintText: 'checkout.address_hint'.tr(),
-                helperText: context.localized(
-                    'Unaweza kuandika eneo au kutumia GPS / utafutaji hapa chini.',
-                    'Type a delivery address or use GPS/search below.'),
-                filled: true,
-                fillColor: FikaGoColors.lightGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showLocationSearch,
-                    icon: const Icon(Icons.search),
-                    label: Text(context.localized('Tafuta eneo', 'Search')),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isFindingLocation ? null : _useCurrentLocation,
-                    icon: _isFindingLocation
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.my_location),
-                    label: Text(context.localized('GPS yangu', 'Use GPS')),
-                  ),
-                ),
-              ],
-            ),
-            if (_customerLocation?.attribution != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    _customerLocation!.attribution!,
-                    style: GoogleFonts.montserrat(
-                        fontSize: 9, color: FikaGoColors.grey),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _landmarkController,
-              decoration: InputDecoration(
-                hintText: 'checkout.landmark_hint'.tr(),
-                filled: true,
-                fillColor: FikaGoColors.lightGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ============================================
-            // 2. PHONE NUMBER
-            // ============================================
-            _sectionTitle('checkout.phone'.tr(), Icons.phone),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                prefixText: '+255 ',
-                hintText: '712 345 678',
-                filled: true,
-                fillColor: FikaGoColors.lightGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ============================================
-            // 3. PAYMENT METHOD
-            // ============================================
-            _sectionTitle('checkout.payment_method'.tr(), Icons.payment),
-            const SizedBox(height: 8),
-            RadioGroup<String>(
-              groupValue: _selectedPayment,
-              onChanged: (value) {
-                if (value != null) setState(() => _selectedPayment = value);
-              },
+            _checkoutCard(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _paymentOption('mpesa', 'M-Pesa', Icons.phone_android),
-                  _paymentOption('tigopesa', 'Tigo Pesa', Icons.phone_android),
-                  _paymentOption('airtel', 'Airtel Money', Icons.phone_android),
-                  _paymentOption('cash', 'checkout.cash'.tr(), Icons.money),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ============================================
-            // 4. SPECIAL INSTRUCTIONS
-            // ============================================
-            _sectionTitle('checkout.instructions'.tr(), Icons.note),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _instructionsController,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'checkout.instructions_hint'.tr(),
-                filled: true,
-                fillColor: FikaGoColors.lightGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ============================================
-            // 5. ORDER SUMMARY
-            // ============================================
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: FikaGoColors.lightGreen,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  _summaryRow('checkout.subtotal'.tr(),
-                      'TZS ${cart.cart?.subtotal.toStringAsFixed(0) ?? "0"}'),
-                  const SizedBox(height: 8),
-                  _summaryRow('checkout.delivery_fee'.tr(),
-                      'TZS ${cart.cart?.deliveryFee.toStringAsFixed(0) ?? "0"}'),
-                  const SizedBox(height: 8),
-                  _summaryRow('checkout.service_fee'.tr(),
-                      'TZS ${cart.cart?.serviceFee.toStringAsFixed(0) ?? "0"}'),
-                  const SizedBox(height: 8),
-                  _summaryRow(context.localized('Punguzo', 'Discount'),
-                      '- TZS ${cart.cart?.discount.toStringAsFixed(0) ?? "0"}'),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(),
+                  _cardLabel(context.localized(
+                      'ANWANI YA DELIVERY', 'DELIVERY ADDRESS')),
+                  const SizedBox(height: 12),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.location_on,
+                          color: FikaGoColors.forestGreen, size: 26),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasAddress
+                                  ? _addressController.text.trim()
+                                  : context.localized(
+                                      'Eneo halijapatikana bado',
+                                      'Location not found yet'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700, fontSize: 14),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              location != null
+                                  ? '${location.city.isNotEmpty ? '${location.city} • ' : ''}${context.localized('Eneo lako la sasa', 'Your current location')}'
+                                  : context.localized(
+                                      'Tumia GPS au tafuta eneo lako',
+                                      'Use GPS or search for your address'),
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11, color: FikaGoColors.grey),
+                            ),
+                          ]),
+                    ),
+                    TextButton(
+                      onPressed: _showLocationSearch,
+                      style: TextButton.styleFrom(
+                          foregroundColor: FikaGoColors.forestGreen,
+                          padding: const EdgeInsets.symmetric(horizontal: 4)),
+                      child: Text(context.localized('Badili', 'Edit')),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _addressController,
+                    onChanged: (_) {
+                      if (!_manualAddressEdited) {
+                        setState(() {
+                          _manualAddressEdited = true;
+                          _customerLocation = null;
+                        });
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: context.localized('Jina la mtaa, jengo au eneo',
+                          'Street, building or area'),
+                      prefixIcon: const Icon(Icons.edit_location_alt_outlined,
+                          size: 20),
+                      filled: true,
+                      fillColor: const Color(0xFFF4F6F5),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none),
+                    ),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('checkout.total'.tr(),
-                          style: GoogleFonts.montserrat(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('TZS ${cart.totalAmount.toStringAsFixed(0)}',
-                          style: GoogleFonts.montserrat(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: FikaGoColors.forestGreen)),
-                    ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed:
+                          _isFindingLocation ? null : _useCurrentLocation,
+                      icon: _isFindingLocation
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.my_location, size: 18),
+                      label: Text(context.localized(
+                          'Tumia location yangu ya sasa',
+                          'Use my current location')),
+                    ),
+                  ),
+                  if (location?.attribution != null)
+                    Text(location!.attribution!,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 9, color: FikaGoColors.grey)),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _landmarkController,
+                    decoration: InputDecoration(
+                      hintText: 'checkout.landmark_hint'.tr(),
+                      prefixIcon: const Icon(Icons.near_me_outlined, size: 20),
+                      filled: true,
+                      fillColor: const Color(0xFFF4F6F5),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none),
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 14),
+            _checkoutCard(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _cardLabel(context.localized(
+                        'TAARIFA ZA MTEJA', 'CUSTOMER DETAILS')),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: _inputDecoration(
+                          context.localized(
+                              'Jina lako kamili', 'Your full name'),
+                          Icons.person_outline),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [TanzaniaPhoneInputFormatter()],
+                      decoration:
+                          _inputDecoration('712 345 678', Icons.phone_outlined)
+                              .copyWith(prefixText: '+255  '),
+                    ),
+                  ]),
+            ),
+            const SizedBox(height: 14),
+            _checkoutCard(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _cardLabel(
+                        context.localized('NJIA YA MALIPO', 'PAYMENT METHOD')),
+                    const SizedBox(height: 10),
+                    RadioGroup<String>(
+                      groupValue: _selectedPayment,
+                      onChanged: (value) {
+                        if (value != null)
+                          setState(() => _selectedPayment = value);
+                      },
+                      child: Column(children: [
+                        _paymentOption('mpesa', 'M-Pesa', Icons.phone_android),
+                        _paymentOption(
+                            'tigopesa', 'Tigo Pesa', Icons.phone_android),
+                        _paymentOption(
+                            'airtel', 'Airtel Money', Icons.phone_android),
+                        _paymentOption('cash', 'checkout.cash'.tr(),
+                            Icons.payments_outlined),
+                      ]),
+                    ),
+                  ]),
+            ),
+            const SizedBox(height: 14),
+            _checkoutCard(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _cardLabel(context.localized(
+                        'MAELEKEZO MAALUM', 'SPECIAL INSTRUCTIONS')),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _instructionsController,
+                      maxLines: 2,
+                      decoration: _inputDecoration(
+                          'checkout.instructions_hint'.tr(),
+                          Icons.sticky_note_2_outlined),
+                    ),
+                  ]),
+            ),
+            const SizedBox(height: 14),
+            _checkoutCard(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _cardLabel(
+                        context.localized('MUHTASARI WA ODA', 'ORDER SUMMARY')),
+                    const SizedBox(height: 14),
+                    _summaryRow('checkout.subtotal'.tr(),
+                        'TZS ${cart.cart?.subtotal.toStringAsFixed(0) ?? "0"}'),
+                    const SizedBox(height: 9),
+                    _summaryRow('checkout.delivery_fee'.tr(),
+                        'TZS ${cart.cart?.deliveryFee.toStringAsFixed(0) ?? "0"}'),
+                    const SizedBox(height: 9),
+                    _summaryRow('checkout.service_fee'.tr(),
+                        'TZS ${cart.cart?.serviceFee.toStringAsFixed(0) ?? "0"}'),
+                    const SizedBox(height: 9),
+                    _summaryRow(context.localized('Punguzo', 'Discount'),
+                        '- TZS ${cart.cart?.discount.toStringAsFixed(0) ?? "0"}'),
+                    const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1)),
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('checkout.total'.tr(),
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 15, fontWeight: FontWeight.bold)),
+                          Text(
+                              'TZS ${(cart.cart?.totalAmount ?? 0).toStringAsFixed(0)}',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: FikaGoColors.forestGreen)),
+                        ]),
+                  ]),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
-
-      // ============================================
-      // BOTTOM BAR (Place Order Button)
-      // ============================================
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
         decoration: BoxDecoration(
-          color: FikaGoColors.lightGreen,
-          boxShadow: [
-            BoxShadow(
-                color: FikaGoColors.charcoal.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -5))
-          ],
-        ),
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 14,
+                  offset: const Offset(0, -4)),
+            ]),
         child: SafeArea(
           child: SizedBox(
             width: double.infinity,
-            height: 55,
+            height: 52,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _placeOrder,
               style: ElevatedButton.styleFrom(
-                backgroundColor: FikaGoColors.forestGreen,
-                foregroundColor: FikaGoColors.lightGreen,
+                backgroundColor: FikaGoColors.sunYellow,
+                foregroundColor: FikaGoColors.charcoal,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(13)),
               ),
               child: _isLoading
                   ? const SizedBox(
-                      height: 24,
-                      width: 24,
+                      width: 23,
+                      height: 23,
                       child: CircularProgressIndicator(
-                          color: FikaGoColors.lightGreen, strokeWidth: 3))
+                          color: FikaGoColors.forestGreen, strokeWidth: 2.5))
                   : Text('checkout.place_order'.tr(),
                       style: GoogleFonts.montserrat(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
+                          fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ),
         ),
@@ -724,28 +822,67 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  Widget _checkoutCard({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(17),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 12,
+                offset: const Offset(0, 3))
+          ],
+        ),
+        child: child,
+      );
+
+  Widget _cardLabel(String label) => Text(
+        label,
+        style: GoogleFonts.montserrat(
+            fontSize: 10,
+            color: FikaGoColors.grey,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.25),
+      );
+
+  InputDecoration _inputDecoration(String hint, IconData icon) =>
+      InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 20),
+        filled: true,
+        fillColor: const Color(0xFFF4F6F5),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
+      );
+
   // ============================================================
   // WIDGETS
   // ============================================================
-  Widget _sectionTitle(String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: FikaGoColors.forestGreen, size: 20),
-        const SizedBox(width: 8),
-        Text(title,
-            style: GoogleFonts.montserrat(
-                fontSize: 16, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
   Widget _paymentOption(String value, String label, IconData icon) {
-    return RadioListTile<String>(
-      value: value,
-      title: Text(label, style: GoogleFonts.montserrat(fontSize: 14)),
-      secondary: Icon(icon, color: FikaGoColors.forestGreen),
-      activeColor: FikaGoColors.forestGreen,
-      contentPadding: EdgeInsets.zero,
+    final selected = _selectedPayment == value;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 7),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFE4F3E9) : const Color(0xFFF4F6F5),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(
+          color: selected ? FikaGoColors.forestGreen : Colors.transparent,
+        ),
+      ),
+      child: RadioListTile<String>(
+        value: value,
+        title: Text(label, style: GoogleFonts.montserrat(fontSize: 13)),
+        secondary: Icon(icon, color: FikaGoColors.forestGreen),
+        activeColor: FikaGoColors.forestGreen,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        dense: true,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+      ),
     );
   }
 
@@ -755,10 +892,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       children: [
         Text(label,
             style: GoogleFonts.montserrat(
-                fontSize: 14, color: FikaGoColors.charcoal)),
+                fontSize: 13, color: FikaGoColors.charcoal)),
         Text(value,
             style: GoogleFonts.montserrat(
-                fontSize: 14, fontWeight: FontWeight.w600)),
+                fontSize: 13, fontWeight: FontWeight.w600)),
       ],
     );
   }

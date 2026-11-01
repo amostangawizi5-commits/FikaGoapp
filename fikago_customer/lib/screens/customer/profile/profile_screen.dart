@@ -8,10 +8,14 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../config/app_localizations.dart';
 import '../../../config/theme.dart';
 import '../../../providers/auth_provider.dart';
-import '../../auth/role_selection_screen.dart';
+import '../../auth/login_screen.dart';
+import '../../auth/register_screen.dart';
+import '../wallet/wallet_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  final ValueChanged<int>? onNavigateToTab;
+
+  const ProfileScreen({super.key, this.onNavigateToTab});
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +104,83 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
+            if (!authProvider.isLoggedIn) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: FikaGoColors.charcoal.withValues(alpha: 0.07),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.localized('Jiunge na FikaGo', 'Join FikaGo'),
+                      style: GoogleFonts.montserrat(
+                          fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      context.localized(
+                        'Ingia au jisajili ili kufuatilia oda zako na kuhifadhi taarifa zako.',
+                        'Log in or create an account to track orders and save your details.',
+                      ),
+                      style: GoogleFonts.montserrat(
+                          fontSize: 12, color: FikaGoColors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => LoginScreen(
+                                      onNavigateToTab: onNavigateToTab)),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: FikaGoColors.forestGreen,
+                              side: const BorderSide(
+                                  color: FikaGoColors.forestGreen),
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            ),
+                            child: Text(context.localized('Ingia', 'Log in')),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => RegisterScreen(
+                                      onNavigateToTab: onNavigateToTab)),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: FikaGoColors.sunYellow,
+                              foregroundColor: FikaGoColors.charcoal,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            ),
+                            child:
+                                Text(context.localized('Jisajili', 'Sign up')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
 
             // ============================================
@@ -129,6 +210,15 @@ class ProfileScreen extends StatelessWidget {
                     icon: Icons.payment_outlined,
                     title: 'profile.payment_methods'.tr(),
                     onTap: () {},
+                  ),
+                  const Divider(height: 1, indent: 60),
+                  _profileTile(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: context.localized('Walleti', 'Wallet'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const WalletScreen()),
+                    ),
                   ),
                   const Divider(height: 1, indent: 60),
                   _profileTile(
@@ -190,66 +280,60 @@ class ProfileScreen extends StatelessWidget {
             // ============================================
             // 4. LOGOUT BUTTON
             // ============================================
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: FikaGoColors.charcoal.withValues(alpha: 0.1),
-                  foregroundColor: FikaGoColors.charcoal,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            if (authProvider.isLoggedIn)
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        FikaGoColors.charcoal.withValues(alpha: 0.1),
+                    foregroundColor: FikaGoColors.charcoal,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  onPressed: () async {
+                    // Onyesha dialog ya kuthibitisha
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(context.localized('Toka?', 'Log out?'),
+                            style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.bold)),
+                        content: Text(
+                          context.localized('Una uhakika unataka kutoka?',
+                              'Are you sure you want to log out?'),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text(context.localized('HAPANA', 'NO')),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text(
+                              context.localized('NDIYO', 'YES'),
+                              style:
+                                  const TextStyle(color: FikaGoColors.charcoal),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await authProvider.logout();
+                    }
+                  },
+                  icon: const Icon(Icons.logout),
+                  label: Text(
+                    'profile.logout'.tr(),
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
                   ),
                 ),
-                onPressed: () async {
-                  // Onyesha dialog ya kuthibitisha
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: Text(context.localized('Toka?', 'Log out?'),
-                          style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.bold)),
-                      content: Text(
-                        context.localized('Una uhakika unataka kutoka?',
-                            'Are you sure you want to log out?'),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: Text(context.localized('HAPANA', 'NO')),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text(
-                            context.localized('NDIYO', 'YES'),
-                            style:
-                                const TextStyle(color: FikaGoColors.charcoal),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true) {
-                    await authProvider.logout();
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RoleSelectionScreen()),
-                        (route) => false,
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.logout),
-                label: Text(
-                  'profile.logout'.tr(),
-                  style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
-                ),
               ),
-            ),
           ],
         ),
       ),

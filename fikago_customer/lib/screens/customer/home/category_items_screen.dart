@@ -4,13 +4,12 @@ import 'package:provider/provider.dart';
 import '../../../config/app_localizations.dart';
 import '../../../config/theme.dart';
 import '../../../models/menu_item_model.dart';
-import '../../../models/restaurant_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../services/restaurant_service.dart';
 import '../../../widgets/menu_item_card.dart';
 import '../cart/cart_screen.dart';
-import 'restaurant_detail_screen.dart';
+import 'menu_item_detail_screen.dart';
 
 class CategoryItemsScreen extends StatefulWidget {
   final String category;
@@ -60,6 +59,8 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
         return _CategoryProduct(
           MenuItem.fromJson(data),
           data['restaurant_name']?.toString() ?? '',
+          double.tryParse(data['rating_avg']?.toString() ?? ''),
+          int.tryParse(data['review_count']?.toString() ?? ''),
         );
       }).toList();
       if (!mounted) return;
@@ -90,6 +91,7 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
             restaurantId: product.item.restaurantId,
             name: product.item.name,
             unitPrice: product.item.price,
+            restaurantName: product.restaurantName,
           );
     if (!mounted) return;
     setState(() => _addingItemId = null);
@@ -101,8 +103,8 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
                 '${product.item.name} added to cart.',
               )
             : context.localized(
-                'Imeshindwa kuongeza bidhaa. Kikapu kinaweza kuwa na bidhaa za mgahawa mwingine.',
-                'Could not add item. Your cart may contain items from another restaurant.',
+                'Imeshindwa kuongeza bidhaa. Jaribu tena.',
+                'Could not add item. Please try again.',
               )),
         backgroundColor:
             added ? FikaGoColors.forestGreen : FikaGoColors.charcoal,
@@ -110,29 +112,16 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
     );
   }
 
-  Future<void> _openRestaurant(_CategoryProduct product) async {
-    final response =
-        await RestaurantService.getRestaurant(product.item.restaurantId);
-    if (!mounted) return;
-    if (response['success'] != true || response['data'] is! Map) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.localized(
-            'Imeshindikana kufungua mgahawa. Jaribu tena.',
-            'Could not open the restaurant. Please try again.',
-          )),
-        ),
-      );
-      return;
-    }
-
-    final restaurant = Restaurant.fromJson(
-      Map<String, dynamic>.from(response['data'] as Map),
-    );
+  Future<void> _openItemDetails(_CategoryProduct product) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RestaurantDetailScreen(restaurant: restaurant),
+        builder: (_) => MenuItemDetailScreen(
+          item: product.item,
+          restaurantName: product.restaurantName,
+          restaurantRating: product.restaurantRating,
+          reviewCount: product.reviewCount,
+        ),
       ),
     );
   }
@@ -158,7 +147,7 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
         leading: IconButton(
           tooltip: context.localized('Rudi nyuma', 'Go back'),
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.maybePop(context),
+          onPressed: () => Navigator.of(context).pop(),
         ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -232,24 +221,22 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
                                     'No items match your search.',
                                   ),
                           )
-                        : GridView.builder(
+                        : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
                             itemCount: products.length,
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 4,
-                              crossAxisSpacing: 6,
-                              mainAxisSpacing: 8,
-                              mainAxisExtent: 190,
-                            ),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final product = products[index];
-                              return MenuItemCard(
-                                item: product.item,
-                                restaurantName: product.restaurantName,
-                                isAdding: _addingItemId == product.item.id,
-                                onTap: () => _openRestaurant(product),
-                                onBuy: () => _addToCart(product),
+                              return SizedBox(
+                                height: 136,
+                                child: MenuItemCard(
+                                  item: product.item,
+                                  restaurantName: product.restaurantName,
+                                  isAdding: _addingItemId == product.item.id,
+                                  onTap: () => _openItemDetails(product),
+                                  onBuy: () => _addToCart(product),
+                                ),
                               );
                             },
                           ),
@@ -311,6 +298,9 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
 class _CategoryProduct {
   final MenuItem item;
   final String restaurantName;
+  final double? restaurantRating;
+  final int? reviewCount;
 
-  const _CategoryProduct(this.item, this.restaurantName);
+  const _CategoryProduct(
+      this.item, this.restaurantName, this.restaurantRating, this.reviewCount);
 }

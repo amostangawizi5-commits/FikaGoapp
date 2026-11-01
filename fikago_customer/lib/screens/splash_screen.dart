@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
-import 'auth/role_selection_screen.dart';
+import 'onboardingScreen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -39,7 +39,8 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => const RoleSelectionScreen(),
+        // Kila app inapofunguliwa, onboarding huanza ukurasa wa kwanza.
+        builder: (_) => const OnboardingScreen(),
       ),
     );
   }

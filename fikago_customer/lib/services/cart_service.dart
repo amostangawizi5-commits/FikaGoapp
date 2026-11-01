@@ -11,10 +11,12 @@ class CartService {
   }
 
   static Future<Map<String, dynamic>> quoteCart({
+    required int cartId,
     required double latitude,
     required double longitude,
   }) async {
     return await ApiService.post('${ApiConfig.cart}/quote', {
+      'cart_id': cartId,
       'delivery_latitude': latitude,
       'delivery_longitude': longitude,
     });
@@ -54,15 +56,19 @@ class CartService {
   }
 
   // Clear cart
-  static Future<Map<String, dynamic>> clearCart() async {
-    return await ApiService.delete(ApiConfig.cart);
+  static Future<Map<String, dynamic>> clearCart({int? cartId}) async {
+    final url = cartId == null ? ApiConfig.cart : '${ApiConfig.cart}/$cartId';
+    return await ApiService.delete(url);
   }
 
   // Apply promo
-  static Future<Map<String, dynamic>> applyPromo(String promoCode) async {
+  static Future<Map<String, dynamic>> applyPromo(
+    String promoCode, {
+    required int cartId,
+  }) async {
     return await ApiService.post(
       ApiConfig.applyPromo,
-      {'promo_code': promoCode},
+      {'promo_code': promoCode, 'cart_id': cartId},
     );
   }
 }

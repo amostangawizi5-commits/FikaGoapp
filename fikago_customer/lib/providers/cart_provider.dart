@@ -6,37 +6,99 @@ import '../models/cart_model.dart';
 import '../services/cart_service.dart';
 
 class CartProvider extends ChangeNotifier {
-  Cart? _cart;
+  List<Cart>? _cartTickets;
+  List<Cart> get _carts => _cartTickets ??= <Cart>[];
   final List<CartItem> _guestItems = [];
+  Map<int, String>? _cartRestaurantNames;
+  Map<int, String> get _guestRestaurantNames =>
+      _cartRestaurantNames ??= <int, String>{};
   int _nextGuestItemId = -1;
-  int? _guestRestaurantId;
+  int? _activeCartId;
   bool _isLoading = false;
 
-  Cart? get cart => _cart;
-  List<CartItem> get items => [...?_cart?.items, ..._guestItems];
+  List<Cart> get carts => List.unmodifiable(_carts);
+  Cart? get cart {
+    if (_activeCartId != null) {
+      for (final ticket in _carts) {
+        if (ticket.cartId == _activeCartId) return ticket;
+      }
+    }
+    return _carts.isEmpty ? null : _carts.first;
+  }
+
+  List<Cart> get tickets {
+    final result = [..._carts];
+    final guestByRestaurant = <int, List<CartItem>>{};
+    for (final item in _guestItems) {
+      final restaurantId = item.restaurantId ?? 0;
+      guestByRestaurant.putIfAbsent(restaurantId, () => []).add(item);
+    }
+    for (final entry in guestByRestaurant.entries) {
+      final subtotal = entry.value.fold<double>(
+        0,
+        (sum, item) => sum + item.totalPrice,
+      );
+      result.add(Cart(
+        cartId: -(entry.key == 0 ? 999999 : entry.key),
+        restaurantId: entry.key == 0 ? null : entry.key,
+        restaurantName: _guestRestaurantNames[entry.key] ?? '',
+        items: entry.value,
+        subtotal: subtotal,
+        deliveryFee: 0,
+        serviceFee: 0,
+        discount: 0,
+        totalAmount: subtotal,
+      ));
+    }
+    return result;
+  }
+
+  List<CartItem> get items => [
+        ..._carts.expand((ticket) => ticket.items),
+        ..._guestItems,
+      ];
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
   double get totalAmount =>
-      (_cart?.totalAmount ?? 0.0) +
-      _guestItems.fold(0.0, (sum, item) => sum + item.totalPrice);
+      _carts.fold<double>(
+        0,
+        (sum, ticket) => sum + ticket.totalAmount,
+      ) +
+      _guestItems.fold<double>(0, (sum, item) => sum + item.totalPrice);
   bool get isLoading => _isLoading;
   bool get hasGuestItems => _guestItems.isNotEmpty;
 
-  // Load cart kutoka backend
+  void selectCart(int cartId) {
+    _activeCartId = cartId;
+    notifyListeners();
+  }
+
   Future<void> loadCart() async {
     _isLoading = true;
     notifyListeners();
-
     try {
       final response = await CartService.getCart();
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      if (response['success'] == true && response['data'] is Map) {
+        final data = Map<String, dynamic>.from(response['data'] as Map);
+        final rawCarts = data['carts'];
+        _carts
+          ..clear()
+          ..addAll(rawCarts is List
+              ? rawCarts.whereType<Map>().map((row) => Cart.fromJson(
+                    Map<String, dynamic>.from(row),
+                  ))
+              : data['cart_id'] != null
+                  ? [Cart.fromJson(data)]
+                  : <Cart>[]);
         _guestItems.clear();
-        _guestRestaurantId = null;
+        _guestRestaurantNames.clear();
+        if (_activeCartId != null &&
+            !_carts.any((ticket) => ticket.cartId == _activeCartId)) {
+          _activeCartId = null;
+        }
       }
     } catch (e) {
       debugPrint('Cart load error: $e');
     }
-
     _isLoading = false;
     notifyListeners();
   }
@@ -46,13 +108,10 @@ class CartProvider extends ChangeNotifier {
     required int restaurantId,
     required String name,
     required double unitPrice,
+    String restaurantName = '',
     int quantity = 1,
   }) {
-    if (_guestItems.isNotEmpty && _guestRestaurantId != restaurantId) {
-      return false;
-    }
-
-    _guestRestaurantId = restaurantId;
+    _guestRestaurantNames[restaurantId] = restaurantName;
     final existingIndex = _guestItems.indexWhere(
       (item) => item.menuItemId == menuItemId,
     );
@@ -85,7 +144,6 @@ class CartProvider extends ChangeNotifier {
 
   Future<bool> syncGuestItems() async {
     if (_guestItems.isEmpty) return true;
-
     final failedItems = <CartItem>[];
     for (final item in List<CartItem>.from(_guestItems)) {
       try {
@@ -93,8 +151,10 @@ class CartProvider extends ChangeNotifier {
           menuItemId: item.menuItemId,
           quantity: item.quantity,
         );
-        if (response['success'] == true) {
-          _cart = Cart.fromJson(response['data']);
+        if (response['success'] == true && response['data'] is Map) {
+          _upsertCart(Cart.fromJson(
+            Map<String, dynamic>.from(response['data'] as Map),
+          ));
         } else {
           failedItems.add(item);
         }
@@ -103,26 +163,29 @@ class CartProvider extends ChangeNotifier {
         failedItems.add(item);
       }
     }
-
     _guestItems
       ..clear()
       ..addAll(failedItems);
-    if (_guestItems.isEmpty) _guestRestaurantId = null;
     notifyListeners();
     return _guestItems.isEmpty;
   }
 
   Future<bool> quoteForLocation({
+    required int cartId,
     required double latitude,
     required double longitude,
   }) async {
     try {
       final response = await CartService.quoteCart(
+        cartId: cartId,
         latitude: latitude,
         longitude: longitude,
       );
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      if (response['success'] == true && response['data'] is Map) {
+        _upsertCart(Cart.fromJson(
+          Map<String, dynamic>.from(response['data'] as Map),
+        ));
+        _activeCartId = cartId;
         notifyListeners();
         return true;
       }
@@ -132,7 +195,6 @@ class CartProvider extends ChangeNotifier {
     return false;
   }
 
-  // Ongeza kwenye cart
   Future<bool> addToCart({
     required int menuItemId,
     int quantity = 1,
@@ -144,23 +206,23 @@ class CartProvider extends ChangeNotifier {
         quantity: quantity,
         specialInstructions: specialInstructions,
       );
-
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      if (response['success'] == true && response['data'] is Map) {
+        final ticket = Cart.fromJson(
+          Map<String, dynamic>.from(response['data'] as Map),
+        );
+        _upsertCart(ticket);
+        _activeCartId = ticket.cartId;
         notifyListeners();
         return true;
       }
-      return false;
     } catch (e) {
       debugPrint('Add to cart error: $e');
-      return false;
     }
+    return false;
   }
 
-  // Update quantity
   Future<void> updateQuantity(int itemId, int quantity) async {
     if (quantity < 1) return;
-
     final guestIndex = _guestItems.indexWhere((item) => item.id == itemId);
     if (guestIndex >= 0) {
       final item = _guestItems[guestIndex];
@@ -176,15 +238,15 @@ class CartProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-
     try {
       final response = await CartService.updateCartItem(
         itemId: itemId,
         quantity: quantity,
       );
-
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      if (response['success'] == true && response['data'] is Map) {
+        _upsertCart(Cart.fromJson(
+          Map<String, dynamic>.from(response['data'] as Map),
+        ));
         notifyListeners();
       }
     } catch (e) {
@@ -192,20 +254,20 @@ class CartProvider extends ChangeNotifier {
     }
   }
 
-  // Remove item
   Future<void> removeItem(int itemId) async {
     final guestIndex = _guestItems.indexWhere((item) => item.id == itemId);
     if (guestIndex >= 0) {
       _guestItems.removeAt(guestIndex);
-      if (_guestItems.isEmpty) _guestRestaurantId = null;
       notifyListeners();
       return;
     }
-
     try {
       final response = await CartService.removeFromCart(itemId);
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      if (response['success'] == true && response['data'] is Map) {
+        final ticket = Cart.fromJson(
+          Map<String, dynamic>.from(response['data'] as Map),
+        );
+        _upsertCart(ticket);
         notifyListeners();
       }
     } catch (e) {
@@ -213,41 +275,82 @@ class CartProvider extends ChangeNotifier {
     }
   }
 
-  // Clear cart
-  Future<void> clearCart() async {
-    if (_cart == null) {
-      _guestItems.clear();
-      _guestRestaurantId = null;
+  Future<bool> removeCart(int cartId) async {
+    if (cartId < 0) {
+      final restaurantId = -cartId;
+      _guestItems.removeWhere((item) => item.restaurantId == restaurantId);
+      _guestRestaurantNames.remove(restaurantId);
       notifyListeners();
-      return;
+      return true;
     }
+    try {
+      final response = await CartService.clearCart(cartId: cartId);
+      if (response['success'] == true) {
+        _carts.removeWhere((ticket) => ticket.cartId == cartId);
+        if (_activeCartId == cartId) _activeCartId = null;
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Remove cart error: $e');
+    }
+    return false;
+  }
 
+  void removeCompletedCart(int cartId) {
+    _carts.removeWhere((ticket) => ticket.cartId == cartId);
+    if (_activeCartId == cartId) _activeCartId = null;
+    notifyListeners();
+  }
+
+  Future<bool> clearCart() async {
     try {
       final response = await CartService.clearCart();
       if (response['success'] == true) {
-        _cart = null;
+        _carts.clear();
         _guestItems.clear();
-        _guestRestaurantId = null;
+        _guestRestaurantNames.clear();
+        _activeCartId = null;
         notifyListeners();
+        return true;
       }
     } catch (e) {
       debugPrint('Clear error: $e');
     }
+    return false;
   }
 
-  // Apply promo
   Future<bool> applyPromo(String promoCode) async {
+    final active = cart;
+    if (active == null) return false;
     try {
-      final response = await CartService.applyPromo(promoCode);
-      if (response['success'] == true) {
-        _cart = Cart.fromJson(response['data']);
+      final response = await CartService.applyPromo(
+        promoCode,
+        cartId: active.cartId,
+      );
+      if (response['success'] == true && response['data'] is Map) {
+        _upsertCart(Cart.fromJson(
+          Map<String, dynamic>.from(response['data'] as Map),
+        ));
         notifyListeners();
         return true;
       }
-      return false;
     } catch (e) {
       debugPrint('Promo error: $e');
-      return false;
+    }
+    return false;
+  }
+
+  void _upsertCart(Cart cart) {
+    final index = _carts.indexWhere((ticket) => ticket.cartId == cart.cartId);
+    if (cart.items.isEmpty) {
+      if (index >= 0) _carts.removeAt(index);
+      return;
+    }
+    if (index < 0) {
+      _carts.add(cart);
+    } else {
+      _carts[index] = cart;
     }
   }
 }

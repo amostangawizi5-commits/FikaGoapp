@@ -36,6 +36,8 @@ class CartItem {
 
 class Cart {
   final int cartId;
+  final int? restaurantId;
+  final String restaurantName;
   final List<CartItem> items;
   final double subtotal;
   final double deliveryFee;
@@ -45,6 +47,8 @@ class Cart {
 
   Cart({
     required this.cartId,
+    this.restaurantId,
+    this.restaurantName = '',
     required this.items,
     required this.subtotal,
     required this.deliveryFee,
@@ -56,10 +60,11 @@ class Cart {
   factory Cart.fromJson(Map<String, dynamic> json) {
     return Cart(
       cartId: json['cart_id'] ?? 0,
-      items: (json['items'] as List?)
-              ?.map((i) => CartItem.fromJson(i))
-              .toList() ??
-          [],
+      restaurantId: int.tryParse(json['restaurant_id']?.toString() ?? ''),
+      restaurantName: json['restaurant_name']?.toString() ?? '',
+      items:
+          (json['items'] as List?)?.map((i) => CartItem.fromJson(i)).toList() ??
+              [],
       subtotal: double.tryParse(json['subtotal'].toString()) ?? 0.0,
       deliveryFee: double.tryParse(json['delivery_fee'].toString()) ?? 0.0,
       serviceFee: double.tryParse(json['service_fee'].toString()) ?? 0.0,

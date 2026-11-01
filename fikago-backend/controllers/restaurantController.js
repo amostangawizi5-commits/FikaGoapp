@@ -96,7 +96,10 @@ const getCategoryItems = async (req, res) => {
     const result = await pool.query(
       `SELECT mi.id, mi.restaurant_id, mi.category_id, mi.name, mi.description,
               mi.price, mi.image_url, mi.preparation_time, mi.is_available,
-              r.name AS restaurant_name, mc.name AS category_name
+              r.name AS restaurant_name, r.rating_avg,
+              (SELECT COUNT(*) FROM restaurant_reviews rr
+               WHERE rr.restaurant_id = r.id) AS review_count,
+              mc.name AS category_name
        FROM menu_items mi
        JOIN restaurants r ON r.id = mi.restaurant_id
        JOIN menu_categories mc ON mc.id = mi.category_id
@@ -113,24 +116,53 @@ const getCategoryItems = async (req, res) => {
   }
 };
 
+// GET /api/restaurants/featured/menu - available food cards for customer home.
+const getFeaturedMenuItems = async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT mi.id, mi.restaurant_id, mi.category_id, mi.name, mi.description,
+              mi.price, mi.image_url, mi.preparation_time, mi.is_available,
+              r.name AS restaurant_name, r.rating_avg,
+              (SELECT COUNT(*) FROM restaurant_reviews rr
+               WHERE rr.restaurant_id = r.id) AS review_count,
+              mc.name AS category_name
+       FROM menu_items mi
+       JOIN restaurants r ON r.id = mi.restaurant_id
+       JOIN menu_categories mc ON mc.id = mi.category_id
+       WHERE r.is_approved = TRUE AND r.is_active = TRUE
+         AND mi.is_available = TRUE AND mc.is_active = TRUE
+       ORDER BY r.rating_avg DESC, mi.id DESC
+       LIMIT 30`
+    );
+    return success(res, result.rows, 'Vyakula vinavyopatikana vimepatikana');
+  } catch (err) {
+    console.error('Featured menu lookup failed:', err.message);
+    return error(res, 'Imeshindwa kupata vyakula', 500);
+  }
+};
+
 // GET /api/restaurants/search/menu?q=wali
 const searchMenuItems = async (req, res) => {
   try {
-    const { q } = req.query;
-    if (!q) return error(res, 'query (q) inahitajika', 400);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
     const result = await pool.query(
       `SELECT mi.id, mi.name, mi.description, mi.price, mi.image_url,
+              mi.preparation_time,
               mi.is_available, r.id AS restaurant_id, r.name AS restaurant_name,
+              r.rating_avg,
+              (SELECT COUNT(*) FROM restaurant_reviews rr
+               WHERE rr.restaurant_id = r.id) AS review_count,
               mc.name AS category_name
        FROM menu_items mi
        JOIN restaurants r ON mi.restaurant_id = r.id
        JOIN menu_categories mc ON mi.category_id = mc.id
-       WHERE (mi.name ILIKE $1 OR mi.description ILIKE $1)
-         AND mi.is_available = TRUE AND r.is_approved = TRUE
-       ORDER BY mi.name ASC LIMIT 50`, [`%${q}%`]
+       WHERE ($1 = '' OR mi.name ILIKE $2 OR mi.description ILIKE $2)
+         AND mi.is_available = TRUE AND mc.is_active = TRUE
+         AND r.is_approved = TRUE AND r.is_active = TRUE
+       ORDER BY mi.name ASC`, [q, `%${q}%`]
     );
-    return success(res, result.rows, 'Matokeo ya utafutaji');
+    return success(res, result.rows, q ? 'Matokeo ya utafutaji' : 'Bidhaa zote');
   } catch (err) {
     return error(res, 'Imeshindwa kutafuta', 500);
   }
@@ -141,5 +173,6 @@ module.exports = {
   getRestaurant,
   getRestaurantMenu,
   getCategoryItems,
+  getFeaturedMenuItems,
   searchMenuItems,
 };

@@ -225,6 +225,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 TextField(
                   controller: phoneController,
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [TanzaniaPhoneInputFormatter()],
                   decoration: InputDecoration(
                     prefixText: '+255 ',
                     hintText: '712 345 678',
@@ -272,11 +273,12 @@ class _WalletScreenState extends State<WalletScreen> {
                   );
                   return;
                 }
-                if (phoneController.text.isEmpty) {
+                if (normalizeTzPhone(phoneController.text) == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                         content: Text(context.localized(
-                            'Weka namba ya simu', 'Enter a phone number')),
+                            'Ingiza tarakimu 9 za simu baada ya +255.',
+                            'Enter the 9 phone digits after +255.')),
                         backgroundColor: FikaGoColors.charcoal),
                   );
                   return;

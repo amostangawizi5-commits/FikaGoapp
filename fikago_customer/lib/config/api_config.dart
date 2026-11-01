@@ -48,6 +48,7 @@ class ApiConfig {
   // ============================================================
   static String get restaurants => '$baseUrl/api/restaurants';
   static String get searchMenu => '$baseUrl/api/restaurants/search/menu';
+  static String get featuredMenu => '$baseUrl/api/restaurants/featured/menu';
   static String get reverseGeocode => '$baseUrl/api/location/reverse-geocode';
   static String get locationSearch => '$baseUrl/api/location/search';
 

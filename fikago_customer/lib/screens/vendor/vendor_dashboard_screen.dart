@@ -30,15 +30,35 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      // ============================================
-      // BOTTOM NAVIGATION
-      // ============================================
-      bottomNavigationBar: BottomNavigationBar(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 900;
+        return Scaffold(
+          body: isDesktop
+              ? Row(
+                  children: [
+                    SizedBox(width: 250, child: _buildSidebar(context)),
+                    const VerticalDivider(width: 1, thickness: 1),
+                    Expanded(
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: _screens,
+                      ),
+                    ),
+                  ],
+                )
+              : IndexedStack(
+                  index: _currentIndex,
+                  children: _screens,
+                ),
+          bottomNavigationBar:
+              isDesktop ? null : _buildBottomNavigation(context),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomNavigation(BuildContext context) => BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
@@ -69,7 +89,96 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             label: context.localized('Wasifu', 'Profile'),
           ),
         ],
+      );
+
+  Widget _buildSidebar(BuildContext context) {
+    final labels = [
+      context.localized('Oda', 'Orders'),
+      context.localized('Menyu', 'Menu'),
+      context.localized('Mapato', 'Earnings'),
+      context.localized('Wasifu', 'Profile'),
+    ];
+    const icons = [
+      Icons.receipt_long_outlined,
+      Icons.restaurant_menu_outlined,
+      Icons.account_balance_wallet_outlined,
+      Icons.person_outline,
+    ];
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 28),
+            child: Row(
+              children: [
+                const Icon(Icons.restaurant, color: FikaGoColors.forestGreen),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'FikaGo ${context.localized('Mgahawa', 'Vendor')}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: FikaGoColors.forestGreen,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var index = 0; index < labels.length; index++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: _sidebarItem(
+                label: labels[index],
+                icon: icons[index],
+                selected: _currentIndex == index,
+                onTap: () => setState(() => _currentIndex = index),
+              ),
+            ),
+        ],
       ),
     );
   }
+
+  Widget _sidebarItem({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) =>
+      Material(
+        color: selected ? FikaGoColors.lightGreen : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+            child: Row(
+              children: [
+                Icon(icon,
+                    color: selected
+                        ? FikaGoColors.forestGreen
+                        : FikaGoColors.grey),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                    color: selected
+                        ? FikaGoColors.forestGreen
+                        : FikaGoColors.charcoal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }

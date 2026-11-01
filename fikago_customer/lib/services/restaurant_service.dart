@@ -40,8 +40,13 @@ class RestaurantService {
     );
   }
 
+  static Future<Map<String, dynamic>> getFeaturedMenuItems() async =>
+      ApiService.get(ApiConfig.featuredMenu);
+
   // Search menu items
   static Future<Map<String, dynamic>> searchMenu(String query) async {
-    return await ApiService.get('${ApiConfig.searchMenu}?q=$query');
+    final url = Uri.parse(ApiConfig.searchMenu)
+        .replace(queryParameters: {'q': query}).toString();
+    return await ApiService.get(url);
   }
 }

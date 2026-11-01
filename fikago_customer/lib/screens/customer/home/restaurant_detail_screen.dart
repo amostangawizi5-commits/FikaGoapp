@@ -13,6 +13,7 @@ import '../../../providers/cart_provider.dart';
 import '../../../services/restaurant_service.dart';
 import '../../../widgets/menu_item_card.dart';
 import '../cart/cart_screen.dart';
+import 'menu_item_detail_screen.dart';
 
 class RestaurantDetailScreen extends StatefulWidget {
   final Restaurant restaurant;
@@ -60,6 +61,7 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
             restaurantId: item.restaurantId,
             name: item.name,
             unitPrice: item.price,
+            restaurantName: widget.restaurant.name,
           );
     if (!mounted) return;
     setState(() => _addingItemId = null);
@@ -102,10 +104,10 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
                           itemCount: category.items.length,
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 6,
-                            mainAxisSpacing: 8,
-                            mainAxisExtent: 190,
+                            crossAxisCount: 1,
+                            crossAxisSpacing: 0,
+                            mainAxisSpacing: 10,
+                            mainAxisExtent: 136,
                           ),
                           itemBuilder: (context, index) {
                             final item = category.items[index];
@@ -113,6 +115,17 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
                               item: item,
                               restaurantName: widget.restaurant.name,
                               isAdding: _addingItemId == item.id,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => MenuItemDetailScreen(
+                                    item: item,
+                                    restaurantName: widget.restaurant.name,
+                                    restaurantRating:
+                                        widget.restaurant.ratingAvg,
+                                  ),
+                                ),
+                              ),
                               onBuy: () => _addToCart(item),
                             );
                           },

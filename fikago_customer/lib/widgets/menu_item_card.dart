@@ -31,115 +31,111 @@ class MenuItemCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            if (restaurantName?.isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 5, 6, 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.storefront,
-                        size: 11, color: FikaGoColors.forestGreen),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        restaurantName!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w600,
-                          color: FikaGoColors.charcoal,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            Expanded(
+              flex: 4,
+              child: SizedBox.expand(
+                child: item.imageUrl?.isNotEmpty == true
+                    ? Image.network(
+                        item.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const _ProductPlaceholder(),
+                      )
+                    : const _ProductPlaceholder(),
               ),
-            SizedBox(
-              height: restaurantName?.isNotEmpty == true ? 72 : 82,
-              child: item.imageUrl?.isNotEmpty == true
-                  ? Image.network(
-                      item.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const _ProductPlaceholder(),
-                    )
-                  : const _ProductPlaceholder(),
             ),
             Expanded(
+              flex: 6,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(7, 5, 7, 6),
+                padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (restaurantName?.isNotEmpty == true)
+                      Row(
+                        children: [
+                          const Icon(Icons.storefront,
+                              size: 13, color: FikaGoColors.forestGreen),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              restaurantName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: FikaGoColors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     Text(
                       item.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.montserrat(
-                        fontSize: 10.5,
-                        height: 1.12,
+                        fontSize: 14,
+                        height: 1.15,
                         fontWeight: FontWeight.w700,
                         color: FikaGoColors.charcoal,
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      'TZS ${item.price.toStringAsFixed(0)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: FikaGoColors.forestGreen,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      height: 27,
-                      child: FilledButton(
-                        onPressed: isAdding ? null : onBuy,
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          backgroundColor: FikaGoColors.forestGreen,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor:
-                              FikaGoColors.forestGreen.withValues(alpha: 0.7),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'TZS ${item.price.toStringAsFixed(0)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: FikaGoColors.forestGreen,
+                            ),
                           ),
                         ),
-                        child: isAdding
-                            ? const SizedBox(
-                                width: 13,
-                                height: 13,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.8,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.add_shopping_cart,
-                                        size: 12),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      context.localized(
-                                          'Ongeza kikapuni', 'Add to Cart'),
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 34,
+                          child: FilledButton.icon(
+                            onPressed: isAdding ? null : onBuy,
+                            style: FilledButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              backgroundColor: FikaGoColors.forestGreen,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: FikaGoColors.forestGreen
+                                  .withValues(alpha: 0.7),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(9),
                               ),
-                      ),
+                            ),
+                            icon: isAdding
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.8,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_shopping_cart, size: 15),
+                            label: Text(
+                              context.localized('Ongeza', 'Add'),
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

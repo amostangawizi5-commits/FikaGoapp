@@ -11,12 +11,13 @@ const { sendSMS } = require('../services/smsService');
 // POST /api/orders - Create order from cart
 const createOrder = async (req, res) => {
   const client = await pool.connect();
+  let transactionCommitted = false;
   try {
     await client.query('BEGIN');
     const customerId = req.user.id;
     const { customer_name, delivery_address, delivery_landmark, delivery_latitude,
             delivery_longitude, customer_phone, payment_method,
-            special_instructions } = req.body;
+            special_instructions, cart_id } = req.body;
     const normalizedCustomerPhone = normalizeTzPhone(customer_phone);
     const customerName = String(customer_name || '').trim();
     const deliveryAddress = String(delivery_address || '').trim();
@@ -43,8 +44,14 @@ const createOrder = async (req, res) => {
     }
 
     // 1. Pata cart
+    const requestedCartId = Number(cart_id);
+    if (!Number.isInteger(requestedCartId) || requestedCartId < 1) {
+      await client.query('ROLLBACK');
+      return error(res, 'Cart ID si sahihi', 400);
+    }
     const cartResult = await client.query(
-      'SELECT * FROM carts WHERE customer_id = $1', [customerId]
+      'SELECT * FROM carts WHERE customer_id = $1 AND id = $2',
+      [customerId, requestedCartId]
     );
     if (cartResult.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -133,32 +140,42 @@ const createOrder = async (req, res) => {
       [order.id, customerId]
     );
 
-    const notificationBody = `Oda ${order.order_number} imepokelewa. Jumla: TZS ${Number(totalAmount).toFixed(0)}. ` +
-      `Anuani: ${deliveryAddress}`;
-    const notification = await client.query(
-      `INSERT INTO notifications (user_id, title, body, type, reference_id)
-       VALUES ($1, $2, $3, 'order_confirmation', $4) RETURNING id`,
-      [customerId, 'Order confirmation', notificationBody, order.id]
-    );
-
-    // 8. Futa cart
+    // 8. Futa cart ndani ya transaction, kisha hifadhi oda kabla ya
+    // kujaribu kutuma notifications za ziada.
     await client.query('DELETE FROM cart_items WHERE cart_id = $1', [cart.id]);
-    await client.query(
-      `UPDATE carts SET subtotal = 0, discount = 0, service_fee = 0,
-       total_amount = 0, promo_code = NULL, restaurant_id = NULL WHERE id = $1`,
-      [cart.id]
-    );
+    await client.query('DELETE FROM carts WHERE id = $1', [cart.id]);
 
     await client.query('COMMIT');
+    transactionCommitted = true;
+
+    // Notification schema inaweza kuwa na aina tofauti kati ya mazingira.
+    // Kushindwa kwake hakupaswi kurudisha nyuma oda iliyokwisha hifadhiwa.
+    let notificationId = null;
+    try {
+      const notificationBody = `Oda ${order.order_number} imepokelewa. Jumla: TZS ${Number(totalAmount).toFixed(0)}. ` +
+        `Anuani: ${deliveryAddress}`;
+      const notification = await pool.query(
+        `INSERT INTO notifications (user_id, title, body, type, reference_id)
+         VALUES ($1, $2, $3, 'order_confirmation', $4) RETURNING id`,
+        [customerId, 'Order confirmation', notificationBody, order.id]
+      );
+      notificationId = notification.rows[0]?.id ?? null;
+    } catch (notificationError) {
+      console.warn(
+        `Order ${order.order_number} was saved, but its notification could not be created:`,
+        notificationError.message,
+      );
+    }
+
     const sms = await sendSMS(
       normalizedCustomerPhone,
       `FikaGo: Oda ${order.order_number} imepokelewa. Jumla TZS ${Number(totalAmount).toFixed(0)}.`,
     );
     order.confirmation_sent = Boolean(sms.success);
-    order.confirmation_notification_id = notification.rows[0].id;
+    order.confirmation_notification_id = notificationId;
     return success(res, order, 'Oda imeundwa na confirmation imetumwa', 201);
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!transactionCommitted) await client.query('ROLLBACK');
     console.error(err);
     return error(res, 'Imeshindwa kuunda oda', 500);
   } finally {
@@ -216,7 +233,12 @@ const getOrder = async (req, res) => {
       `SELECT o.*, r.name AS restaurant_name, r.phone_number AS restaurant_phone,
               r.logo_url AS restaurant_logo,
               u.full_name AS rider_name, u.phone_number AS rider_phone,
-              rp.vehicle_type, rp.license_plate
+              rp.vehicle_type, rp.license_plate,
+              rp.rating_avg AS rider_rating,
+              rp.current_latitude AS rider_latitude,
+              rp.current_longitude AS rider_longitude,
+              (SELECT rr.rating FROM restaurant_reviews rr
+               WHERE rr.order_id = o.id AND rr.customer_id = $2) AS customer_rating
        FROM orders o
        JOIN restaurants r ON o.restaurant_id = r.id
        LEFT JOIN users u ON o.rider_id = u.id
@@ -275,6 +297,87 @@ const cancelOrder = async (req, res) => {
   }
 };
 
+// PUT /api/orders/:id/confirm-delivery - Customer confirms receipt and closes the order.
+const confirmDelivery = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const orderResult = await client.query(
+      `SELECT * FROM orders WHERE id = $1 AND customer_id = $2 FOR UPDATE`,
+      [req.params.id, req.user.id]
+    );
+    if (!orderResult.rows.length) {
+      await client.query('ROLLBACK');
+      return error(res, 'Oda haipo', 404);
+    }
+    const order = orderResult.rows[0];
+    if (!['picked_up', 'on_the_way'].includes(order.status)) {
+      await client.query('ROLLBACK');
+      return error(res, 'Oda hii haisubiri uthibitisho wa kupokelewa', 409);
+    }
+
+    const assignmentResult = await client.query(
+      `SELECT id, rider_id FROM delivery_assignments
+       WHERE order_id = $1 AND rider_id = $2
+         AND status IN ('picked_up', 'on_the_way')
+       ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+      [order.id, order.rider_id]
+    );
+    if (!assignmentResult.rows.length || !order.rider_id) {
+      await client.query('ROLLBACK');
+      return error(res, 'Rider wa oda hii hajapatikana', 409);
+    }
+    const assignment = assignmentResult.rows[0];
+
+    await client.query(
+      `UPDATE orders SET status = 'delivered', payment_status = 'released',
+       delivered_at = NOW(), payout_released_at = NOW() WHERE id = $1`,
+      [order.id]
+    );
+    await client.query(
+      `UPDATE delivery_assignments SET status = 'delivered', delivered_at = NOW()
+       WHERE id = $1`, [assignment.id]
+    );
+
+    const riderPayout = Number(order.rider_payout) || 0;
+    const vendorPayout = Number(order.vendor_payout) || 0;
+    await client.query(
+      `UPDATE wallets SET balance = balance + $1, total_earned = total_earned + $1,
+       pending_balance = GREATEST(pending_balance - $1, 0), updated_at = NOW()
+       WHERE user_id = $2`, [riderPayout, assignment.rider_id]
+    );
+    await client.query(
+      `UPDATE rider_profiles SET is_busy = FALSE, total_deliveries = total_deliveries + 1
+       WHERE user_id = $1`, [assignment.rider_id]
+    );
+
+    const vendor = await client.query(
+      'SELECT owner_id FROM restaurants WHERE id = $1', [order.restaurant_id]
+    );
+    if (vendor.rows.length) {
+      await client.query(
+        `UPDATE wallets SET balance = balance + $1, total_earned = total_earned + $1,
+         pending_balance = GREATEST(pending_balance - $1, 0), updated_at = NOW()
+         WHERE user_id = $2`, [vendorPayout, vendor.rows[0].owner_id]
+      );
+    }
+    await client.query(
+      `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
+       VALUES ($1, 'delivered', $2, 'Receipt confirmed by customer; payment released')`,
+      [order.id, req.user.id]
+    );
+
+    await client.query('COMMIT');
+    return success(res, { status: 'delivered' }, 'Umehakikisha umepokea oda');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Customer delivery confirmation failed:', err);
+    return error(res, 'Imeshindwa kuthibitisha kupokea oda', 500);
+  } finally {
+    client.release();
+  }
+};
+
 const createComplaint = async (req, res) => {
   try {
     const { id } = req.params;
@@ -298,4 +401,53 @@ const createComplaint = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getMyOrders, getOrder, cancelOrder, createComplaint };
+const createReview = async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    const rating = Number(req.body.rating);
+    const comment = String(req.body.comment || '').trim();
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return error(res, 'Rating lazima iwe kati ya 1 na 5', 400);
+    }
+
+    const orderResult = await pool.query(
+      `SELECT restaurant_id, status FROM orders
+       WHERE id = $1 AND customer_id = $2`, [orderId, req.user.id]
+    );
+    if (!orderResult.rows.length) return error(res, 'Oda haipo', 404);
+    if (orderResult.rows[0].status !== 'delivered') {
+      return error(res, 'Unaweza kutathmini oda iliyowasilishwa tu', 400);
+    }
+
+    const result = await pool.query(
+      `INSERT INTO restaurant_reviews
+         (restaurant_id, customer_id, order_id, rating, comment)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [orderResult.rows[0].restaurant_id, req.user.id, orderId, rating,
+       comment || null]
+    );
+    await pool.query(
+      `UPDATE restaurants
+       SET rating_avg = (SELECT AVG(rating)::numeric(3,2)
+                         FROM restaurant_reviews WHERE restaurant_id = $1)
+       WHERE id = $1`, [orderResult.rows[0].restaurant_id]
+    );
+    return success(res, result.rows[0], 'Tathmini imehifadhiwa', 201);
+  } catch (err) {
+    if (err.code === '23505') {
+      return error(res, 'Umeshatoa tathmini kwa oda hii', 409);
+    }
+    console.error(err);
+    return error(res, 'Imeshindikana kuhifadhi tathmini', 500);
+  }
+};
+
+module.exports = {
+  createOrder,
+  getMyOrders,
+  getOrder,
+  cancelOrder,
+  confirmDelivery,
+  createComplaint,
+  createReview,
+};

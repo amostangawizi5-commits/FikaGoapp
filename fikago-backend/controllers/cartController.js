@@ -14,12 +14,29 @@ const parseCoordinates = (latitude, longitude) => {
   return { latitude: lat, longitude: lng };
 };
 
+const getCartData = async (cartId) => {
+  const cartResult = await pool.query(
+    `SELECT c.id, c.restaurant_id, r.name AS restaurant_name
+     FROM carts c LEFT JOIN restaurants r ON r.id = c.restaurant_id
+     WHERE c.id = $1`, [cartId]
+  );
+  if (cartResult.rows.length === 0) return null;
+  const summary = await calculateCartTotal(cartId);
+  const cart = cartResult.rows[0];
+  return {
+    cart_id: cart.id,
+    restaurant_id: cart.restaurant_id,
+    restaurant_name: cart.restaurant_name || '',
+    ...summary,
+  };
+};
+
 // Helper: Calculate cart total
 const calculateCartTotal = async (cartId, destination = {}) => {
   const client = await pool.connect();
   try {
     const itemsResult = await client.query(
-      `SELECT ci.*, mi.name FROM cart_items ci
+      `SELECT ci.*, mi.name, mi.restaurant_id FROM cart_items ci
        JOIN menu_items mi ON ci.menu_item_id = mi.id
        WHERE ci.cart_id = $1`, [cartId]
     );
@@ -105,18 +122,18 @@ const calculateCartTotal = async (cartId, destination = {}) => {
 const getCart = async (req, res) => {
   try {
     const customerId = req.user.id;
-    let cartResult = await pool.query(
-      'SELECT * FROM carts WHERE customer_id = $1', [customerId]
+    const cartResult = await pool.query(
+      `SELECT c.id FROM carts c
+       WHERE c.customer_id = $1 AND c.restaurant_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM cart_items ci WHERE ci.cart_id = c.id)
+       ORDER BY c.id`, [customerId]
     );
-    if (cartResult.rows.length === 0) {
-      const newCart = await pool.query(
-        'INSERT INTO carts (customer_id) VALUES ($1) RETURNING *', [customerId]
-      );
-      cartResult = newCart;
+    const carts = [];
+    for (const row of cartResult.rows) {
+      const cart = await getCartData(row.id);
+      if (cart) carts.push(cart);
     }
-    const cartId = cartResult.rows[0].id;
-    const summary = await calculateCartTotal(cartId);
-    return success(res, { cart_id: cartId, ...summary }, 'Cart imepatikana');
+    return success(res, { carts }, 'Vikapu vimepatikana');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kupata cart', 500);
@@ -133,17 +150,19 @@ const quoteCart = async (req, res) => {
       return error(res, 'Latitude na longitude si sahihi', 400);
     }
 
+    const cartId = Number(req.body.cart_id);
+    if (!Number.isInteger(cartId) || cartId < 1) {
+      return error(res, 'Cart ID si sahihi', 400);
+    }
     const cartResult = await pool.query(
-      'SELECT id FROM carts WHERE customer_id = $1', [req.user.id],
+      'SELECT id FROM carts WHERE customer_id = $1 AND id = $2',
+      [req.user.id, cartId],
     );
     if (cartResult.rows.length === 0) return error(res, 'Cart haipo', 404);
 
-    const summary = await calculateCartTotal(cartResult.rows[0].id, req.body);
-    return success(
-      res,
-      { cart_id: cartResult.rows[0].id, ...summary },
-      'Quote imepatikana',
-    );
+    await calculateCartTotal(cartId, req.body);
+    const cart = await getCartData(cartId);
+    return success(res, cart, 'Quote imepatikana');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kupata quote ya oda', 400);
@@ -167,24 +186,13 @@ const addToCart = async (req, res) => {
     }
     const menuItem = itemResult.rows[0];
 
-    let cartResult = await client.query(
-      'SELECT * FROM carts WHERE customer_id = $1', [customerId]
+    const cartResult = await client.query(
+      `INSERT INTO carts (customer_id, restaurant_id) VALUES ($1, $2)
+       ON CONFLICT (customer_id, restaurant_id)
+       DO UPDATE SET restaurant_id = EXCLUDED.restaurant_id
+       RETURNING id`, [customerId, menuItem.restaurant_id]
     );
-    let cartId;
-    if (cartResult.rows.length === 0) {
-      const newCart = await client.query(
-        `INSERT INTO carts (customer_id, restaurant_id) VALUES ($1, $2) RETURNING id`,
-        [customerId, menuItem.restaurant_id]
-      );
-      cartId = newCart.rows[0].id;
-    } else {
-      cartId = cartResult.rows[0].id;
-      if (cartResult.rows[0].restaurant_id &&
-          cartResult.rows[0].restaurant_id !== menuItem.restaurant_id) {
-        await client.query('ROLLBACK');
-        return error(res, 'Cart ina vyakula vya restaurant nyingine. Futa kwanza.', 400);
-      }
-    }
+    const cartId = cartResult.rows[0].id;
 
     const existing = await client.query(
       'SELECT * FROM cart_items WHERE cart_id = $1 AND menu_item_id = $2',
@@ -207,8 +215,8 @@ const addToCart = async (req, res) => {
     }
 
     await client.query('COMMIT');
-    const summary = await calculateCartTotal(cartId);
-    return success(res, { cart_id: cartId, ...summary }, 'Chakula kimeongezwa');
+    const cart = await getCartData(cartId);
+    return success(res, cart, 'Bidhaa imeongezwa kwenye tiketi ya mgahawa');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -240,8 +248,8 @@ const updateCartItem = async (req, res) => {
       [quantity, itemId]
     );
 
-    const summary = await calculateCartTotal(itemResult.rows[0].cart_id);
-    return success(res, summary, 'Cart item imesasishwa');
+    const cart = await getCartData(itemResult.rows[0].cart_id);
+    return success(res, cart, 'Cart item imesasishwa');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kusasisha', 500);
@@ -263,8 +271,8 @@ const removeFromCart = async (req, res) => {
     if (itemResult.rows.length === 0) return error(res, 'Cart item haipo', 404);
 
     await pool.query('DELETE FROM cart_items WHERE id = $1', [itemId]);
-    const summary = await calculateCartTotal(itemResult.rows[0].cart_id);
-    return success(res, summary, 'Chakula kimeondolewa');
+    const cart = await getCartData(itemResult.rows[0].cart_id);
+    return success(res, cart, 'Bidhaa imeondolewa');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kuondoa', 500);
@@ -275,18 +283,31 @@ const removeFromCart = async (req, res) => {
 const clearCart = async (req, res) => {
   try {
     const customerId = req.user.id;
-    const cartResult = await pool.query(
-      'SELECT id FROM carts WHERE customer_id = $1', [customerId]
-    );
-    if (cartResult.rows.length > 0) {
-      await pool.query('DELETE FROM cart_items WHERE cart_id = $1', [cartResult.rows[0].id]);
-      await pool.query(
-        `UPDATE carts SET subtotal = 0, discount = 0, service_fee = 0,
-         total_amount = 0, promo_code = NULL, restaurant_id = NULL
-         WHERE id = $1`, [cartResult.rows[0].id]
-      );
+    const cartId = req.params.cartId ? Number(req.params.cartId) : null;
+    if (cartId !== null && (!Number.isInteger(cartId) || cartId < 1)) {
+      return error(res, 'Cart ID si sahihi', 400);
     }
-    return success(res, null, 'Cart imefutwa');
+    if (cartId === null) {
+      await pool.query(
+        `DELETE FROM cart_items WHERE cart_id IN
+         (SELECT id FROM carts WHERE customer_id = $1)`, [customerId]
+      );
+      await pool.query(
+        `DELETE FROM carts WHERE customer_id = $1`, [customerId]
+      );
+      return success(res, null, 'Vikapu vyote vimeondolewa');
+    }
+
+    await pool.query(
+      'DELETE FROM cart_items WHERE cart_id = $1 AND cart_id IN (SELECT id FROM carts WHERE customer_id = $2)',
+      [cartId, customerId]
+    );
+    const result = await pool.query(
+      'DELETE FROM carts WHERE id = $1 AND customer_id = $2 RETURNING id',
+      [cartId, customerId]
+    );
+    if (result.rows.length === 0) return error(res, 'Cart haipo', 404);
+    return success(res, { cart_id: cartId }, 'Tiketi imeondolewa');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kufuta', 500);
@@ -297,6 +318,10 @@ const clearCart = async (req, res) => {
 const applyPromo = async (req, res) => {
   try {
     const { promo_code } = req.body;
+    const cartId = Number(req.body.cart_id);
+    if (!Number.isInteger(cartId) || cartId < 1) {
+      return error(res, 'Cart ID si sahihi', 400);
+    }
     const customerId = req.user.id;
 
     const promoResult = await pool.query(
@@ -309,7 +334,8 @@ const applyPromo = async (req, res) => {
     const cartResult = await pool.query(
       `SELECT c.id, COALESCE(SUM(ci.total_price), 0) AS subtotal
        FROM carts c LEFT JOIN cart_items ci ON ci.cart_id = c.id
-       WHERE c.customer_id = $1 GROUP BY c.id`, [customerId]
+       WHERE c.customer_id = $1 AND c.id = $2 GROUP BY c.id`,
+      [customerId, cartId]
     );
     if (cartResult.rows.length === 0) return error(res, 'Cart haipo', 404);
     if (Number(cartResult.rows[0].subtotal) < Number(promoResult.rows[0].min_order_amount || 0)) {
@@ -321,8 +347,8 @@ const applyPromo = async (req, res) => {
       [promo_code, cartResult.rows[0].id]
     );
 
-    const summary = await calculateCartTotal(cartResult.rows[0].id);
-    return success(res, summary, 'Promo code imetumika');
+    const cart = await getCartData(cartResult.rows[0].id);
+    return success(res, cart, 'Promo code imetumika');
   } catch (err) {
     console.error(err);
     return error(res, 'Imeshindwa kutumia promo', 500);

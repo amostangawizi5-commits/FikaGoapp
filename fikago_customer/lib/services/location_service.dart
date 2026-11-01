@@ -35,13 +35,24 @@ class LocationSearchResult {
 }
 
 class LocationService {
-  static Future<List<LocationSearchResult>> search(String query) async {
+  static Future<List<LocationSearchResult>> search(
+    String query, {
+    CustomerLocation? near,
+  }) async {
     try {
+      final queryParameters = <String, String>{'q': query};
+      if (near != null) {
+        queryParameters['lat'] = near.latitude.toString();
+        queryParameters['lon'] = near.longitude.toString();
+      }
       final response = await ApiService.get(
-        '${ApiConfig.baseUrl}/api/location/search?q=${Uri.encodeQueryComponent(query)}',
+        '${ApiConfig.locationSearch}?${Uri(queryParameters: queryParameters).query}',
       ).timeout(const Duration(seconds: 12));
       if (response['success'] == true && response['data'] is List) {
-        final results = _searchResultsFromJson(response['data'] as List);
+        final results = _sortByDistance(
+          _searchResultsFromJson(response['data'] as List),
+          near,
+        );
         if (results.isNotEmpty) return results;
       }
     } catch (_) {
@@ -49,18 +60,44 @@ class LocationService {
     }
 
     try {
-      final locations =
-          await locationFromAddress(query).timeout(const Duration(seconds: 10));
-      return locations
+      final localQuery = near != null && near.city.isNotEmpty
+          ? '$query, ${near.city}, Tanzania'
+          : query;
+      final locations = await locationFromAddress(localQuery)
+          .timeout(const Duration(seconds: 10));
+      return _sortByDistance(locations
           .map((location) => LocationSearchResult(
                 address: query,
                 latitude: location.latitude,
                 longitude: location.longitude,
               ))
-          .toList();
+          .toList(), near);
     } catch (_) {
       throw Exception('Location search is unavailable');
     }
+  }
+
+  static List<LocationSearchResult> _sortByDistance(
+    List<LocationSearchResult> results,
+    CustomerLocation? near,
+  ) {
+    if (near == null) return results;
+    results.sort((a, b) {
+      final aDistance = Geolocator.distanceBetween(
+        near.latitude,
+        near.longitude,
+        a.latitude,
+        a.longitude,
+      );
+      final bDistance = Geolocator.distanceBetween(
+        near.latitude,
+        near.longitude,
+        b.latitude,
+        b.longitude,
+      );
+      return aDistance.compareTo(bDistance);
+    });
+    return results;
   }
 
   static List<LocationSearchResult> _searchResultsFromJson(List data) {
@@ -87,12 +124,7 @@ class LocationService {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        // Android can still provide a recent cached fix while GPS is starting
-        // or temporarily disabled. Use it only while it is reasonably fresh.
-        final cached = await _getLastKnownPosition();
-        if (_isRecent(cached, const Duration(minutes: 5))) {
-          return await _locationFromPosition(cached!);
-        }
+        // A cached fix can point to a previous city when location is off.
         return null;
       }
 
@@ -108,11 +140,6 @@ class LocationService {
         }
       }
 
-      final cached = await _getLastKnownPosition();
-      if (_isRecent(cached, const Duration(seconds: 30))) {
-        return await _locationFromPosition(cached!);
-      }
-
       Position? position;
       try {
         position = await Geolocator.getCurrentPosition(
@@ -121,7 +148,11 @@ class LocationService {
             timeLimit: Duration(seconds: 12),
           ),
         );
+        if (position.accuracy > 1000) position = null;
       } catch (_) {
+        position = null;
+      }
+      if (position == null) {
         try {
           position = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
@@ -129,9 +160,9 @@ class LocationService {
               timeLimit: Duration(seconds: 8),
             ),
           );
+          if (position.accuracy > 1000) position = null;
         } catch (_) {
-          position =
-              _isRecent(cached, const Duration(minutes: 5)) ? cached : null;
+          position = null;
         }
       }
       if (position == null) return null;
@@ -140,21 +171,6 @@ class LocationService {
     } catch (_) {
       return null;
     }
-  }
-
-  static Future<Position?> _getLastKnownPosition() async {
-    if (kIsWeb) return null;
-    try {
-      return await Geolocator.getLastKnownPosition();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static bool _isRecent(Position? position, Duration maxAge) {
-    if (position == null) return false;
-    final age = DateTime.now().difference(position.timestamp);
-    return !age.isNegative && age <= maxAge;
   }
 
   static Future<void> openRelevantSettings() async {

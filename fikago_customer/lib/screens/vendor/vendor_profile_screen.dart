@@ -8,7 +8,6 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/vendor_service.dart';
 import '../../utils/phone_number.dart';
-import '../auth/role_selection_screen.dart';
 
 class VendorProfileScreen extends StatefulWidget {
   const VendorProfileScreen({super.key});
@@ -476,6 +475,9 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               controller: controller,
               maxLines: lines,
               keyboardType: type,
+              inputFormatters: type == TextInputType.phone
+                  ? [TanzaniaPhoneInputFormatter()]
+                  : null,
               decoration: InputDecoration(
                   labelText: label,
                   hintText: hint,
@@ -558,10 +560,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     if (confirm == true && mounted) {
       await provider.logout();
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
-            (_) => false);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/staff-access',
+          (_) => false,
+        );
       }
     }
   }

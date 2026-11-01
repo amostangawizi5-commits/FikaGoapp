@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
-import '../auth/role_selection_screen.dart';
 
 class AdminSettingsScreen extends StatelessWidget {
   const AdminSettingsScreen({super.key});
@@ -50,11 +49,11 @@ class AdminSettingsScreen extends StatelessWidget {
               onPressed: () async {
                 await context.read<AuthProvider>().logout();
                 if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const RoleSelectionScreen()),
-                      (_) => false);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/staff-access',
+                    (_) => false,
+                  );
                 }
               },
               icon: const Icon(Icons.logout),

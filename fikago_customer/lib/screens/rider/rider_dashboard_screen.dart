@@ -25,10 +25,12 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
   bool _isOnline = false;
   bool _isUpdatingStatus = false;
   bool _isLoadingOrders = false;
+  bool _isLoadingActiveAssignments = false;
   bool _isLoadingWallet = false;
   String? _ordersError;
   String _selectedSection = 'jobs';
   List<Map<String, dynamic>> _availableOrders = [];
+  List<Map<String, dynamic>> _activeAssignments = [];
   Map<String, dynamic>? _wallet;
   final Set<int> _processingOrderIds = {};
   Timer? _refreshTimer;
@@ -39,6 +41,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (_isOnline && _selectedSection == 'jobs') {
         _loadAvailableOrders(silent: true);
+        _loadActiveAssignments();
       }
     });
   }
@@ -69,7 +72,14 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
       if (!value) _availableOrders = [];
       _ordersError = null;
     });
-    if (value) await _loadAvailableOrders();
+    if (value) await _refreshJobs();
+  }
+
+  Future<void> _refreshJobs() async {
+    await Future.wait([
+      _loadAvailableOrders(),
+      _loadActiveAssignments(),
+    ]);
   }
 
   Future<void> _loadAvailableOrders({bool silent = false}) async {
@@ -81,26 +91,23 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     final response = await RiderService.getAssignments(status: 'new');
     if (!mounted) return;
     if (response['success'] == true && response['data'] is List) {
-      final orders = (response['data'] as List)
-          .whereType<Map>()
-          .map((row) {
-            final order = Map<String, dynamic>.from(row);
-            final address = order['delivery_address']?.toString() ?? '';
-            final landmark = order['delivery_landmark']?.toString() ?? '';
-            return <String, dynamic>{
-              ...order,
-              'display_id': order['order_number']?.toString() ??
-                  order['order_id']?.toString() ??
-                  '',
-              'restaurant': order['restaurant_name']?.toString() ?? '',
-              'restaurantPhone': order['restaurant_phone']?.toString() ?? '',
-              'pickup': order['restaurant_address']?.toString() ?? '',
-              'dropoff': [address, landmark]
-                  .where((part) => part.trim().isNotEmpty)
-                  .join(', '),
-            };
-          })
-          .toList();
+      final orders = (response['data'] as List).whereType<Map>().map((row) {
+        final order = Map<String, dynamic>.from(row);
+        final address = order['delivery_address']?.toString() ?? '';
+        final landmark = order['delivery_landmark']?.toString() ?? '';
+        return <String, dynamic>{
+          ...order,
+          'display_id': order['order_number']?.toString() ??
+              order['order_id']?.toString() ??
+              '',
+          'restaurant': order['restaurant_name']?.toString() ?? '',
+          'restaurantPhone': order['restaurant_phone']?.toString() ?? '',
+          'pickup': order['restaurant_address']?.toString() ?? '',
+          'dropoff': [address, landmark]
+              .where((part) => part.trim().isNotEmpty)
+              .join(', '),
+        };
+      }).toList();
       setState(() {
         _availableOrders = orders;
         _isLoadingOrders = false;
@@ -110,9 +117,27 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
       setState(() {
         _isLoadingOrders = false;
         _ordersError = response['message']?.toString() ??
-            context.localized('Imeshindikana kupakia oda.',
-                'Could not load orders.');
+            context.localized(
+                'Imeshindikana kupakia oda.', 'Could not load orders.');
       });
+    }
+  }
+
+  Future<void> _loadActiveAssignments() async {
+    if (!_isOnline || _isLoadingActiveAssignments) return;
+    _isLoadingActiveAssignments = true;
+    final response = await RiderService.getAssignments(status: 'active');
+    if (!mounted) return;
+    if (response['success'] == true && response['data'] is List) {
+      setState(() {
+        _activeAssignments = (response['data'] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+        _isLoadingActiveAssignments = false;
+      });
+    } else {
+      setState(() => _isLoadingActiveAssignments = false);
     }
   }
 
@@ -141,6 +166,31 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
       ),
     );
     await _loadAvailableOrders(silent: true);
+    await _loadActiveAssignments();
+  }
+
+  Future<void> _markOrderPickedUp(Map<String, dynamic> assignment) async {
+    final id = int.tryParse(assignment['id']?.toString() ?? '');
+    if (id == null) return;
+    setState(() => _processingOrderIds.add(id));
+    final response = await RiderService.markPickedUp(id);
+    if (!mounted) return;
+    setState(() => _processingOrderIds.remove(id));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(response['success'] == true
+            ? context.localized(
+                'Umechukua oda. Mteja amejulishwa kuwa uko njiani.',
+                'Order picked up. The customer has been notified you are on the way.',
+              )
+            : response['message']?.toString() ??
+                context.localized(
+                  'Imeshindikana kusasisha oda.',
+                  'Could not update this order.',
+                )),
+      ),
+    );
+    if (response['success'] == true) await _loadActiveAssignments();
   }
 
   Future<void> _declineOrder(Map<String, dynamic> order) async {
@@ -335,64 +385,66 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
 
   Widget _buildJobsPage() {
     return Column(
-        children: [
-          // 1. KITUFE CHA ONLINE/OFFLINE (Juu)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: _isOnline ? FikaGoColors.forestGreen : Colors.grey[600],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _isOnline
-                      ? context.localized('Uko Online', 'You are online')
-                      : context.localized('Uko Offline', 'You are offline'),
-                  style: GoogleFonts.montserrat(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                ),
-                Switch(
-                  value: _isOnline,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: FikaGoColors.sunYellow,
-                  onChanged: _isUpdatingStatus ? null : _setOnline,
-                ),
-              ],
-            ),
+      children: [
+        // 1. KITUFE CHA ONLINE/OFFLINE (Juu)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          color: _isOnline ? FikaGoColors.forestGreen : Colors.grey[600],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _isOnline
+                    ? context.localized('Uko Online', 'You are online')
+                    : context.localized('Uko Offline', 'You are offline'),
+                style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
+              ),
+              Switch(
+                value: _isOnline,
+                activeThumbColor: Colors.white,
+                activeTrackColor: FikaGoColors.sunYellow,
+                onChanged: _isUpdatingStatus ? null : _setOnline,
+              ),
+            ],
           ),
+        ),
 
-          // 2. ORODHA YA ODA (Kama yuko Online)
-          Expanded(
-            child: !_isOnline
-                ? _buildOfflineMessage()
-                : _isLoadingOrders && _availableOrders.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : _ordersError != null && _availableOrders.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_ordersError!, textAlign: TextAlign.center),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: _loadAvailableOrders,
-                                  child: Text(context.localized(
-                                      'Jaribu tena', 'Try again')),
-                                ),
-                              ],
+        // 2. ORODHA YA ODA (Kama yuko Online)
+        Expanded(
+          child: !_isOnline
+              ? _buildOfflineMessage()
+              : (_isLoadingOrders || _isLoadingActiveAssignments) &&
+                      _availableOrders.isEmpty &&
+                      _activeAssignments.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _ordersError != null && _availableOrders.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_ordersError!, textAlign: TextAlign.center),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _loadAvailableOrders,
+                                child: Text(context.localized(
+                                    'Jaribu tena', 'Try again')),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _availableOrders.isEmpty && _activeAssignments.isEmpty
+                          ? _buildNoOrdersMessage()
+                          : RefreshIndicator(
+                              onRefresh: _refreshJobs,
+                              child: _buildOrdersList(),
                             ),
-                          )
-                : _availableOrders.isEmpty
-                    ? _buildNoOrdersMessage()
-                    : RefreshIndicator(
-                        onRefresh: _loadAvailableOrders,
-                        child: _buildOrdersList(),
-                      ),
-          ),
-        ],
-      );
+        ),
+      ],
+    );
   }
 
   Widget _buildEarningsPage() {
@@ -410,8 +462,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
         ),
       );
     }
-    final balance =
-        double.tryParse(_wallet!['balance']?.toString() ?? '') ?? 0;
+    final balance = double.tryParse(_wallet!['balance']?.toString() ?? '') ?? 0;
     final pending =
         double.tryParse(_wallet!['pending_balance']?.toString() ?? '') ?? 0;
     return ListView(
@@ -506,145 +557,235 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
   }
 
   Widget _buildOrdersList() {
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: _availableOrders.length,
-      itemBuilder: (context, index) {
-        final order = _availableOrders[index];
-        final assignmentId = int.tryParse(order['id'].toString());
-        final isProcessing = assignmentId != null &&
-            _processingOrderIds.contains(assignmentId);
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: FikaGoColors.sunYellow, width: 2),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4))
-            ],
+      children: [
+        if (_activeAssignments.isNotEmpty) ...[
+          Text(
+            context.localized('Oda ulizokubali', 'Your active deliveries'),
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.bold, fontSize: 16),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 10),
+          ..._activeAssignments.map(_activeAssignmentCard),
+        ],
+        Text(
+          context.localized('Oda mpya', 'Available orders'),
+          style:
+              GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 10),
+        if (_availableOrders.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(context.localized(
+                'Hakuna oda mpya kwa sasa.',
+                'No new orders right now.',
+              )),
+            ),
+          )
+        else
+          ..._availableOrders.map(_availableOrderCard),
+      ],
+    );
+  }
+
+  Widget _activeAssignmentCard(Map<String, dynamic> assignment) {
+    final id = int.tryParse(assignment['id']?.toString() ?? '');
+    final status = assignment['status']?.toString() ?? 'accepted';
+    final isProcessing = id != null && _processingOrderIds.contains(id);
+    final hasPickedUp = ['picked_up', 'on_the_way'].contains(status);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.delivery_dining,
+                    color: FikaGoColors.forestGreen),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${assignment['order_number'] ?? ''} · ${assignment['restaurant_name'] ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text('TZS ${assignment['earnings'] ?? 0}'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${context.localized('Mteja', 'Customer')}: ${assignment['customer_name'] ?? ''}',
+            ),
+            Text(
+              '${context.localized('Anuani', 'Address')}: ${assignment['delivery_address'] ?? ''}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            if (hasPickedUp)
+              Text(
+                context.localized(
+                  'Uko njiani kumpelekea mteja oda.',
+                  'You are on the way to deliver this order.',
+                ),
+                style: const TextStyle(
+                    color: FikaGoColors.forestGreen,
+                    fontWeight: FontWeight.w600),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isProcessing
+                      ? null
+                      : () => _markOrderPickedUp(assignment),
+                  icon: isProcessing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.route),
+                  label: Text(context.localized(
+                    'Nimechukua oda, anza safari',
+                    'Picked up, start trip',
+                  )),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _availableOrderCard(Map<String, dynamic> order) {
+    final assignmentId = int.tryParse(order['id'].toString());
+    final isProcessing =
+        assignmentId != null && _processingOrderIds.contains(assignmentId);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: FikaGoColors.sunYellow, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Kichwa: Order ID & Earnings
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(order['display_id']?.toString() ?? '',
-                      style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text('TZS ${order['earnings'] ?? 0}',
-                      style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.bold,
-                          color: FikaGoColors.forestGreen,
-                          fontSize: 16)),
-                ],
+              Text(order['display_id']?.toString() ?? '',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('TZS ${order['earnings'] ?? 0}',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.bold,
+                      color: FikaGoColors.forestGreen,
+                      fontSize: 16)),
+            ],
+          ),
+          const Divider(height: 24),
+          Row(
+            children: [
+              const Icon(Icons.store,
+                  size: 16, color: FikaGoColors.forestGreen),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(order['restaurant']?.toString() ?? '',
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w600)),
+                    Text(order['pickup']?.toString() ?? '',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 12, color: FikaGoColors.grey)),
+                  ],
+                ),
               ),
-              const Divider(height: 24),
-
-              // Pickup
-              Row(
-                children: [
-                  const Icon(Icons.store,
-                      size: 16, color: FikaGoColors.forestGreen),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(order['restaurant']?.toString() ?? '',
-                            style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w600)),
-                        Text(order['pickup']?.toString() ?? '',
-                            style: GoogleFonts.montserrat(
-                                fontSize: 12, color: FikaGoColors.grey)),
-                      ],
-                    ),
-                  ),
-                  // Kitufe cha Kumpigia Mgahawa
-                  IconButton(
-                    onPressed: () => _callRestaurant(
-                        order['restaurantPhone']?.toString() ?? ''),
-                    icon:
-                        const Icon(Icons.phone, color: FikaGoColors.sunYellow),
-                    style: IconButton.styleFrom(
-                      backgroundColor:
-                          FikaGoColors.sunYellow.withValues(alpha: 0.1),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Dropoff
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(context.localized('Mteja', 'Customer'),
-                            style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w600)),
-                        Text(order['dropoff']?.toString() ?? '',
-                            style: GoogleFonts.montserrat(
-                                fontSize: 12, color: FikaGoColors.grey)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Vitufe vya Kazi
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed:
-                          isProcessing ? null : () => _declineOrder(order),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(context.localized('KATAA', 'DECLINE'),
-                          style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed:
-                          isProcessing ? null : () => _acceptOrder(order),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: FikaGoColors.forestGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(context.localized('KUBALI', 'ACCEPT'),
-                          style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
+              IconButton(
+                onPressed: () =>
+                    _callRestaurant(order['restaurantPhone']?.toString() ?? ''),
+                icon: const Icon(Icons.phone, color: FikaGoColors.sunYellow),
+                style: IconButton.styleFrom(
+                  backgroundColor:
+                      FikaGoColors.sunYellow.withValues(alpha: 0.1),
+                ),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.location_on, size: 16, color: Colors.red),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(context.localized('Mteja', 'Customer'),
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w600)),
+                    Text(order['dropoff']?.toString() ?? '',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 12, color: FikaGoColors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: isProcessing ? null : () => _declineOrder(order),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(context.localized('KATAA', 'DECLINE'),
+                      style:
+                          GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: isProcessing ? null : () => _acceptOrder(order),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: FikaGoColors.forestGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(context.localized('KUBALI', 'ACCEPT'),
+                      style:
+                          GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

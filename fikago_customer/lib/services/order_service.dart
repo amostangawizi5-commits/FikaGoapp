@@ -7,6 +7,7 @@ import 'api_service.dart';
 class OrderService {
   // Create order
   static Future<Map<String, dynamic>> createOrder({
+    required int cartId,
     required String deliveryAddress,
     required String customerName,
     String? deliveryLandmark,
@@ -19,6 +20,7 @@ class OrderService {
     return await ApiService.post(
       ApiConfig.orders,
       {
+        'cart_id': cartId,
         'delivery_address': deliveryAddress,
         'customer_name': customerName,
         if (deliveryLandmark != null) 'delivery_landmark': deliveryLandmark,
@@ -50,6 +52,9 @@ class OrderService {
     return await ApiService.put('${ApiConfig.orders}/$id/cancel', {});
   }
 
+  static Future<Map<String, dynamic>> confirmDelivery(int id) async =>
+      ApiService.put('${ApiConfig.orders}/$id/confirm-delivery', {});
+
   static Future<Map<String, dynamic>> createComplaint({
     required int orderId,
     required String subject,
@@ -58,5 +63,16 @@ class OrderService {
       ApiService.post('${ApiConfig.orders}/$orderId/complaints', {
         'subject': subject,
         'description': description,
+      });
+
+  static Future<Map<String, dynamic>> createReview({
+    required int orderId,
+    required int rating,
+    String? comment,
+  }) =>
+      ApiService.post('${ApiConfig.orders}/$orderId/reviews', {
+        'rating': rating,
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       });
 }

@@ -9,6 +9,7 @@ import '../../config/app_localizations.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/phone_number.dart';
 import '../customer/home/home_screen.dart'; // Home ya Mteja
 import '../vendor/vendor_dashboard_screen.dart'; // Dashboard ya Mgahawa (Vendor)
 import '../admin/admin_dashboard_screen.dart';
@@ -16,11 +17,17 @@ import '../rider/rider_dashboard_screen.dart';
 import '../rider/rider_register_screen.dart';
 import 'register_screen.dart';
 import 'otp_screen.dart';
+import 'customer_auth_layout.dart';
 
 class LoginScreen extends StatefulWidget {
   final String role; // Inatoka kwenye Role Selection
+  final ValueChanged<int>? onNavigateToTab;
 
-  const LoginScreen({super.key, this.role = 'customer'});
+  const LoginScreen({
+    super.key,
+    this.role = 'customer',
+    this.onNavigateToTab,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -198,6 +205,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.role == 'customer') return _buildCustomerLogin(context);
+
     return Scaffold(
       backgroundColor: FikaGoColors.forestGreen,
       body: SafeArea(
@@ -224,6 +233,37 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      if (widget.role == 'rider') ...[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: TextButton.icon(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                foregroundColor: FikaGoColors.lightGreen,
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 8,
+                                ),
+                              ),
+                              icon: const Icon(Icons.arrow_back, size: 19),
+                              label: Text(
+                                context.localized(
+                                  'Rudi kwenye uchaguzi wa akaunti',
+                                  'Back to role selection',
+                                ),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       // CARD YA LOGIN
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 400),
@@ -253,8 +293,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                   widget.role == 'vendor'
                                       ? context.localized(
                                           'Ingia kama Mgahawa', 'Vendor login')
-                                      : context.localized(
-                                          'Karibu FikaGo', 'Welcome to FikaGo'),
+                                      : widget.role == 'admin'
+                                          ? context.localized(
+                                              'Ingia kama Msimamizi',
+                                              'Administrator sign in')
+                                          : context.localized('Karibu FikaGo',
+                                              'Welcome to FikaGo'),
                                   style: GoogleFonts.montserrat(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -265,10 +309,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Text(
                                   widget.role == 'vendor'
                                       ? 'Tumia namba ya simu ya mgahawa na password.'
-                                      : context.localized(
-                                          'Ingia kwa namba yako na password',
-                                          'Log in with your phone number and password',
-                                        ),
+                                      : widget.role == 'admin'
+                                          ? context.localized(
+                                              'Ingia kwa akaunti ya msimamizi iliyoidhinishwa.',
+                                              'Sign in with an authorized administrator account.',
+                                            )
+                                          : context.localized(
+                                              'Ingia kwa namba yako na password',
+                                              'Log in with your phone number and password',
+                                            ),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.montserrat(
                                     fontSize: 13,
@@ -565,24 +614,187 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-}
 
-class TanzaniaPhoneInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('255')) {
-      digits = digits.substring(3);
-    } else if (digits.startsWith('0')) {
-      digits = digits.substring(1);
-    }
-    if (digits.length > 9) digits = digits.substring(0, 9);
-    return TextEditingValue(
-      text: digits,
-      selection: TextSelection.collapsed(offset: digits.length),
-    );
-  }
+  Widget _buildCustomerLogin(BuildContext context) => CustomerAuthLayout(
+        onNavigateToTab: widget.onNavigateToTab,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 10),
+            Text(
+              context.localized('Ingia kwenye Akaunti', 'Log In'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                  fontSize: 21,
+                  fontWeight: FontWeight.bold,
+                  color: FikaGoColors.charcoal),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              context.localized('Karibu tena FikaGo', 'Welcome back to FikaGo'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                  fontSize: 11, color: FikaGoColors.grey),
+            ),
+            const SizedBox(height: 22),
+            _customerLoginField(
+              context,
+              label: context.localized('Namba ya Simu', 'Phone Number'),
+              hint: '711 123 456',
+              controller: _phoneController,
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [TanzaniaPhoneInputFormatter()],
+              prefixText: '+255  ',
+            ),
+            const SizedBox(height: 12),
+            _customerLoginField(
+              context,
+              label: context.localized('Nenosiri', 'Password'),
+              hint: context.localized(
+                  'Ingiza nenosiri lako', 'Enter your password'),
+              controller: _passwordController,
+              icon: Icons.lock_outline,
+              obscureText: _obscurePassword,
+              suffix: IconButton(
+                tooltip: context.localized('Onyesha nenosiri', 'Show password'),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(_obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 49,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _loginWithPassword,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FikaGoColors.sunYellow,
+                  foregroundColor: FikaGoColors.charcoal,
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: FikaGoColors.charcoal),
+                      )
+                    : Text(context.localized('Ingia Sasa', 'Log In Now'),
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _isLoading ? null : _sendOtp,
+                child: Text(
+                    context.localized('Ingia kwa OTP', 'Log in with OTP'),
+                    style: GoogleFonts.montserrat(
+                        color: FikaGoColors.forestGreen, fontSize: 11)),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                    context.localized(
+                        'Huna akaunti? ', "Don't have an account? "),
+                    style: GoogleFonts.montserrat(
+                        fontSize: 11, color: FikaGoColors.grey)),
+                TextButton(
+                  onPressed: () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RegisterScreen(
+                        onNavigateToTab: widget.onNavigateToTab,
+                      ),
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 3)),
+                  child: Text(context.localized('Jisajili sasa', 'Sign up'),
+                      style: GoogleFonts.montserrat(
+                          color: FikaGoColors.forestGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  Widget _customerLoginField(
+    BuildContext context, {
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    required IconData icon,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    bool obscureText = false,
+    String? prefixText,
+    Widget? suffix,
+  }) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                  fontSize: 11, color: FikaGoColors.charcoal)),
+          const SizedBox(height: 3),
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 9,
+                    offset: const Offset(0, 3)),
+              ],
+            ),
+            child: TextField(
+              controller: controller,
+              keyboardType: keyboardType,
+              inputFormatters: inputFormatters,
+              obscureText: obscureText,
+              style: GoogleFonts.montserrat(fontSize: 12),
+              decoration: InputDecoration(
+                prefixIcon: Icon(icon, color: FikaGoColors.grey, size: 20),
+                prefixText: prefixText,
+                prefixStyle: GoogleFonts.montserrat(
+                    color: FikaGoColors.charcoal, fontSize: 12),
+                hintText: hint,
+                hintStyle: GoogleFonts.montserrat(
+                    color: FikaGoColors.grey, fontSize: 12),
+                suffixIcon: suffix,
+                filled: true,
+                fillColor: const Color(0xFFF0F1F0),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(
+                        color: FikaGoColors.forestGreen, width: 1.2)),
+              ),
+            ),
+          ),
+        ],
+      );
 }

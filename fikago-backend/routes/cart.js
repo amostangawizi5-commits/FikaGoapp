@@ -23,6 +23,7 @@ router.post('/quote', quoteCart);
 router.post('/add', addToCart);
 router.put('/item/:itemId', updateCartItem);
 router.delete('/item/:itemId', removeFromCart);
+router.delete('/:cartId', clearCart);
 router.delete('/', clearCart);
 router.post('/promo', applyPromo);
 

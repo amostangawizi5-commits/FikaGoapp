@@ -3,10 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../config/app_localizations.dart';
 import '../../../config/theme.dart';
 import '../../../services/order_service.dart';
+import 'order_tracking_screen.dart';
 import 'order_ticket_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final ValueChanged<int>? onNavigateToTab;
+
+  const OrdersScreen({super.key, this.onNavigateToTab});
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -180,6 +183,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Widget _orderCard(Map<String, dynamic> order) {
     final orderNumber = order['order_number']?.toString() ?? '';
+    final orderId = int.tryParse(order['id']?.toString() ?? '');
     final restaurant = order['restaurant_name']?.toString() ?? 'FikaGo';
     final status = order['status']?.toString() ?? 'pending';
     final amount = double.tryParse(order['total_amount'].toString()) ?? 0;
@@ -219,6 +223,37 @@ class _OrdersScreenState extends State<OrdersScreen>
                 style: GoogleFonts.montserrat(
                     color: FikaGoColors.forestGreen,
                     fontWeight: FontWeight.bold)),
+            if (orderId != null &&
+                !['cancelled', 'rejected'].contains(status)) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 38,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OrderTrackingScreen(
+                        orderId: orderId,
+                        orderNumber: orderNumber,
+                        currentStatus: status,
+                        onNavigateToTab: widget.onNavigateToTab,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.delivery_dining, size: 18),
+                  label: Text(status == 'delivered'
+                      ? context.localized('Tazama Oda', 'View Order')
+                      : context.localized('Fuatilia Oda', 'Track Order')),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: FikaGoColors.forestGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton.icon(
                   onPressed: () => _reportIssue(order),
@@ -236,8 +271,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                           order['delivery_address']?.toString() ?? '',
                       amount: amount,
                       items: items,
-                      deliveryLandmark:
-                          order['delivery_landmark']?.toString(),
+                      deliveryLandmark: order['delivery_landmark']?.toString(),
                       specialInstructions:
                           order['special_instructions']?.toString(),
                       paymentMethod: order['payment_method']?.toString(),
@@ -246,8 +280,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                           double.tryParse(order['delivery_fee'].toString()),
                       serviceFee:
                           double.tryParse(order['service_fee'].toString()),
-                      discount:
-                          double.tryParse(order['discount'].toString()),
+                      discount: double.tryParse(order['discount'].toString()),
                     ),
                   ),
                 ),

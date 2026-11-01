@@ -152,13 +152,17 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    final pending = _orders
-        .where((order) =>
-            ['pending', 'rider_assigned'].contains(order['status']))
-        .toList();
+    final pending =
+        _orders.where((order) => order['status'] == 'pending').toList();
     final preparing = _orders
-        .where((order) =>
-            ['confirmed', 'preparing', 'ready'].contains(order['status']))
+        .where((order) => [
+              'confirmed',
+              'preparing',
+              'ready',
+              'rider_assigned',
+              'picked_up',
+              'on_the_way',
+            ].contains(order['status']))
         .toList();
     final history = _orders
         .where((order) =>
@@ -337,6 +341,19 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen>
                   Text(
                       context.localized('Inasubiri rider', 'Waiting for rider'),
                       style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w600, fontSize: 12))
+                else if (order['status'] == 'rider_assigned')
+                  Text(
+                      context.localized(
+                          'Rider amekubali; inasubiri afike kuchukua oda.',
+                          'Rider accepted; waiting for pickup.'),
+                      style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w600, fontSize: 12))
+                else if (['picked_up', 'on_the_way'].contains(order['status']))
+                  Text(
+                      context.localized('Rider yuko njiani kwa mteja.',
+                          'Rider is on the way to the customer.'),
+                      style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w600, fontSize: 12)),
               ],
             ),
@@ -366,8 +383,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen>
       case 'pending':
         return context.localized('INASUBIRI', 'PENDING');
       case 'rider_assigned':
-        return context.localized(
-            'RIDER AMEJIPANGA · SUBIRI UHAKIKI',
+        return context.localized('RIDER AMEJIPANGA · SUBIRI UHAKIKI',
             'RIDER ASSIGNED · AWAITING REVIEW');
       case 'confirmed':
         return context.localized('IMEKUBALIWA', 'CONFIRMED');

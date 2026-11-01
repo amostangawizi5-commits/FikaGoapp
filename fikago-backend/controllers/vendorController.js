@@ -114,32 +114,53 @@ const getVendorOrders = async (req, res) => {
 
 // PUT /api/vendor/orders/:id/accept
 const acceptOrder = async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const vendorId = req.user.id;
     const { id } = req.params;
     const restaurant = await getVendorRestaurant(vendorId);
-    if (!restaurant) return error(res, 'Restaurant haipo', 404);
+    if (!restaurant) {
+      await client.query('ROLLBACK');
+      return error(res, 'Restaurant haipo', 404);
+    }
 
-    const orderResult = await pool.query(
-      'SELECT * FROM orders WHERE id = $1 AND restaurant_id = $2', [id, restaurant.id]
+    const orderResult = await client.query(
+      'SELECT * FROM orders WHERE id = $1 AND restaurant_id = $2 FOR UPDATE',
+      [id, restaurant.id]
     );
-    if (orderResult.rows.length === 0) return error(res, 'Oda haipo', 404);
+    if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Oda haipo', 404);
+    }
 
     const prepTime = Number(req.body.preparation_time_minutes) || 20;
-    if (prepTime < 5 || prepTime > 180) return error(res, 'Muda uwe kati ya dakika 5 na 180', 400);
+    if (prepTime < 5 || prepTime > 180) {
+      await client.query('ROLLBACK');
+      return error(res, 'Muda uwe kati ya dakika 5 na 180', 400);
+    }
     if (!['pending', 'rider_assigned'].includes(orderResult.rows[0].status)) {
+      await client.query('ROLLBACK');
       return error(res, 'Oda hii haiwezi kukubaliwa tena', 409);
     }
-    await pool.query('UPDATE orders SET status = $1, preparation_time_minutes = $2 WHERE id = $3', ['confirmed', prepTime, id]);
-    await pool.query(
+    await client.query(
+      'UPDATE orders SET status = $1, preparation_time_minutes = $2 WHERE id = $3',
+      ['confirmed', prepTime, id]
+    );
+    await client.query(
       `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
        VALUES ($1, 'confirmed', $2, 'Accepted by vendor')`,
       [id, vendorId]
     );
 
+    await client.query('COMMIT');
     return success(res, null, 'Oda imekubaliwa');
   } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Vendor accept order failed:', err);
     return error(res, 'Imeshindwa kukubali', 500);
+  } finally {
+    client.release();
   }
 };
 
@@ -263,13 +284,6 @@ const assignRider = async (req, res) => {
       `INSERT INTO delivery_assignments (order_id, rider_id, vendor_id, status, earnings)
        VALUES ($1, $2, $3, 'pending', $4)`,
       [id, rider_id, vendorId, order.rider_payout]
-    );
-
-    // Log
-    await client.query(
-      `INSERT INTO order_status_logs (order_id, status, changed_by_user_id, notes)
-       VALUES ($1, 'rider_assigned', $2, 'Rider assigned by vendor')`,
-      [id, vendorId]
     );
 
     await client.query('COMMIT');

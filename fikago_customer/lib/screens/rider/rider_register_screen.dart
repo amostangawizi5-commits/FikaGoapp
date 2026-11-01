@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../config/app_localizations.dart';
 import '../../config/theme.dart';
 import '../../services/auth_service.dart';
+import '../../utils/phone_number.dart';
 import 'rider_pending_screen.dart';
 
 class RiderRegisterScreen extends StatefulWidget {
@@ -47,6 +48,13 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
     if ([name, phone, password, license, plate].any((value) => value.isEmpty)) {
       _showMessage(context.localized(
           'Jaza sehemu zote muhimu.', 'Please complete all required fields.'));
+      return;
+    }
+    if (normalizeTzPhone(phone) == null) {
+      _showMessage(context.localized(
+        'Ingiza tarakimu 9 baada ya +255.',
+        'Enter exactly 9 digits after +255.',
+      ));
       return;
     }
     if (password.length < 6) {
@@ -228,7 +236,7 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: keyboardType == TextInputType.phone
-          ? [FilteringTextInputFormatter.digitsOnly]
+          ? [TanzaniaPhoneInputFormatter()]
           : null,
       decoration: InputDecoration(
         labelText: label,
