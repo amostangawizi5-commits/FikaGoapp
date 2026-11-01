@@ -7,14 +7,21 @@ require('dotenv').config({
 });
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  ...(process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432,
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+      }),
+  // Managed providers put sslmode=require in their external connection URL.
+  // Render's internal database URL can be used without TLS inside the region.
+  ...(process.env.DB_SSL === 'disable' ? { ssl: false } : {}),
+  max: parseInt(process.env.DB_POOL_MAX || '3', 10),
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
 });
 
 pool.on('connect', () => {
