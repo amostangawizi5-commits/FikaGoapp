@@ -13,7 +13,7 @@ class ApiConfig {
   // - Physical Device: pass your computer's Wi-Fi IP with
   //   --dart-define=API_BASE_URL_DEVICE=http://192.168.1.10:5000
   // - Chrome/Web: defaults to http://localhost:5000
-  // - Production build: --dart-define=API_BASE_URL=https://<render-service>.onrender.com
+  // - Production build: --dart-define=API_BASE_URL=https://<vercel-project>.vercel.app
   // ============================================================
   // Optional shared override for cases where one URL should be used on every
   // platform. Prefer the platform-specific values below for web + device.

@@ -260,7 +260,9 @@ app.use('/api/upload', require('./routes/upload'));
 app.use('/api/rider', require('./routes/rider'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/payments', require('./routes/payments'));
-app.use('/uploads', express.static(uploadsDir));
+if (!process.env.VERCEL) {
+  app.use('/uploads', express.static(uploadsDir));
+}
 
 // ============================================================
 // ERROR HANDLING

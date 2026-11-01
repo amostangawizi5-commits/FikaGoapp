@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
 const { randomUUID } = require('crypto');
+const { put } = require('@vercel/blob');
 const { authenticate, authorize } = require('../middlewares/auth');
 const uploadsDir = path.resolve(
   process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads'),
@@ -11,7 +12,8 @@ const uploadsDir = path.resolve(
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  // Leave room for multipart headers under Vercel's 4.5 MB function limit.
+  limits: { fileSize: 4 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
     const expectedMimeTypes = {
@@ -41,7 +43,7 @@ router.post('/:kind', authenticate, authorize('vendor'), (req, res, next) => {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({
         success: false,
-        message: 'Picha imezidi ukubwa wa 5 MB.',
+        message: 'Picha imezidi ukubwa wa 4 MB.',
       });
     }
     const malformed = err.message === 'Unexpected end of form' ||
@@ -61,17 +63,25 @@ router.post('/:kind', authenticate, authorize('vendor'), (req, res, next) => {
   const extension = path.extname(req.file.originalname).toLowerCase();
   const filename = `${req.params.kind}-${Date.now()}-${randomUUID()}${extension}`;
   try {
-    if (process.env.NODE_ENV === 'production' && !process.env.UPLOADS_DIR) {
+    let imageUrl;
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const blob = await put(`${req.params.kind}/${filename}`, req.file.buffer, {
+        access: 'public',
+        addRandomSuffix: true,
+        contentType: req.file.mimetype,
+      });
+      imageUrl = blob.url;
+    } else if (process.env.VERCEL) {
       return res.status(503).json({
         success: false,
-        message: 'Image storage haijawekwa. Weka UPLOADS_DIR kwenye Render na uunganishe persistent disk.',
+        message: 'Image storage haijawekwa. Unganisha Vercel Blob kwenye project hii.',
       });
+    } else {
+      const folder = path.join(uploadsDir, req.params.kind);
+      await fs.mkdir(folder, { recursive: true });
+      await fs.writeFile(path.join(folder, filename), req.file.buffer);
+      imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.params.kind}/${filename}`;
     }
-
-    const folder = path.join(uploadsDir, req.params.kind);
-    await fs.mkdir(folder, { recursive: true });
-    await fs.writeFile(path.join(folder, filename), req.file.buffer);
-    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.params.kind}/${filename}`;
 
     return res.status(200).json({
       success: true,

@@ -16,16 +16,22 @@ const pool = new Pool({
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
       }),
-  // Managed providers put sslmode=require in their external connection URL.
-  // Render's internal database URL can be used without TLS inside the region.
-  ...(process.env.DB_SSL === 'disable' ? { ssl: false } : {}),
+  // Hosted Postgres URLs should include sslmode=require.
+  ...(process.env.DB_SSL === 'disable' && !process.env.DATABASE_URL
+    ? { ssl: false }
+    : {}),
   max: parseInt(process.env.DB_POOL_MAX || '3', 10),
-  idleTimeoutMillis: 10000,
+  idleTimeoutMillis: 5000,
   connectionTimeoutMillis: 10000,
 });
 
+if (process.env.VERCEL) {
+  const { attachDatabasePool } = require('@vercel/functions');
+  attachDatabasePool(pool);
+}
+
 pool.on('connect', () => {
-  console.log(`✅ PostgreSQL Connected: ${process.env.DB_NAME}`);
+  console.log('✅ PostgreSQL Connected');
 });
 
 pool.on('error', (err) => {
